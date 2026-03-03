@@ -58,9 +58,9 @@ async def chat_completion(
             },
         )
         return response.text or "No pude generar una respuesta."
-    except genai_errors.ClientError as exc:
-        if exc.code == 429:
-            logger.warning("Gemini rate-limit reached: %s", exc)
+    except (genai_errors.ClientError, genai_errors.ServerError) as exc:
+        if exc.code in (429, 503):
+            logger.warning("Gemini unavailable (%s): %s", exc.code, exc)
             return (
                 "En este momento el servicio de IA está saturado. "
                 "Por favor intenta de nuevo en unos segundos."
