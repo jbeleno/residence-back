@@ -14,6 +14,7 @@ from app.modules.auth.service import AuthService
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
+    RegisterRequest,
     RequestPasswordResetRequest,
     RequestPinRequest,
     ResetPasswordRequest,
@@ -27,6 +28,17 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 def _service(db: AsyncSession = Depends(get_db)) -> AuthService:
     return AuthService(AuthRepository(db))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Registration
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.post("/register", status_code=201)
+async def register(body: RegisterRequest, svc: AuthService = Depends(_service)):
+    """Register a new user account."""
+    data = await svc.register(body)
+    return success(data)
 
 
 # ══════════════════════════════════════════════════════════════════════════

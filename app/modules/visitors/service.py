@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -46,7 +46,7 @@ class VisitorService:
             raise NotFoundError("Visitante no encontrado")
         if v.exit_time:
             raise BadRequestError("El visitante ya registró salida")
-        v.exit_time = datetime.now(timezone.utc)
+        v.exit_time = datetime.utcnow()
         await self._repo.commit()
         await self._repo.refresh(v)
         return self._out(v)

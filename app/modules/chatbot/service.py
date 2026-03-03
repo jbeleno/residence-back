@@ -132,10 +132,13 @@ class ChatbotService:
         system = SYSTEM_PROMPT.format(context=context_str)
 
         # Build message history
-        history = [
-            {"role": m.role, "content": m.content}
-            for m in (session.messages if session.messages else [])
-        ][-10:]  # last 10 messages for context
+        history: list[dict[str, str]] = []
+        if session_id:
+            # Only existing sessions have prior messages
+            history = [
+                {"role": m.role, "content": m.content}
+                for m in (session.messages or [])
+            ][-10:]  # last 10 messages for context
 
         # Call Gemini
         ai_response = await chat_completion(system, history, message)

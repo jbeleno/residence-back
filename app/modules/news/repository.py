@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -30,7 +30,7 @@ class NewsRepository:
             .where(NewsBoard.condominium_id == cid)
         )
         if published_only:
-            now = datetime.now(timezone.utc)
+            now = datetime.utcnow()
             stmt = stmt.where(
                 NewsBoard.is_published.is_(True),
                 (NewsBoard.expires_at.is_(None)) | (NewsBoard.expires_at > now),

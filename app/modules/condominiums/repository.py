@@ -51,6 +51,6 @@ class CondominiumRepository:
         return condo
 
     async def soft_delete(self, condo: Condominium) -> None:
-        from datetime import datetime, timezone
-        condo.deleted_at = datetime.now(timezone.utc)
+        from datetime import datetime
+        condo.deleted_at = datetime.utcnow()
         await self._db.commit()

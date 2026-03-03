@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from app.core.enums import BookingStatusEnum
@@ -98,10 +98,10 @@ class AmenityService:
 
         if new_status.code == "aprobada":
             booking.approved_by = user_id
-            booking.approved_at = datetime.now(timezone.utc)
+            booking.approved_at = datetime.utcnow()
         elif new_status.code == "cancelada":
             booking.cancelled_by = user_id
-            booking.cancelled_at = datetime.now(timezone.utc)
+            booking.cancelled_at = datetime.utcnow()
 
         await self._repo.commit()
         await self._repo.refresh(booking)

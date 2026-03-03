@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -88,7 +88,7 @@ class ParkingService:
         if vp.exit_time:
             raise BadRequestError("Ya se registró la salida")
 
-        vp.exit_time = datetime.now(timezone.utc)
+        vp.exit_time = datetime.utcnow()
         hours = (vp.exit_time - vp.entry_time).total_seconds() / 3600
         vp.total_cost = math.ceil(hours) * float(vp.hourly_rate)
         vp.is_paid = body.is_paid

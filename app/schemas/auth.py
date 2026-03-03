@@ -68,3 +68,11 @@ class ResetPasswordRequest(BaseModel):
 class VerifyEmailRequest(BaseModel):
     email: EmailStr
     pin: str
+
+
+class RegisterRequest(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str
+    phone: str | None = None
+    condominium_id: UUID | None = None

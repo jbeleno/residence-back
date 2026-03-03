@@ -28,8 +28,8 @@ class Settings(BaseSettings):
 
     # ── Gemini AI ─────────────────────────────────────────────────────────
     GEMINI_API_KEY: str = ""
-    GEMINI_CHAT_MODEL: str = "gemini-2.0-flash-lite"
-    GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
+    GEMINI_CHAT_MODEL: str = "gemini-2.5-flash-lite"
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
 
     # ── App ───────────────────────────────────────────────────────────────
     APP_NAME: str = "Residence SaaS API"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import delete, func, select, text
@@ -46,7 +46,7 @@ class ChatbotRepository:
         await self._db.execute(
             text(
                 "INSERT INTO document_chunks (document_id, chunk_index, content, embedding) "
-                "VALUES (:doc_id, :idx, :content, :emb::vector)"
+                "VALUES (:doc_id, :idx, :content, CAST(:emb AS vector))"
             ),
             {"doc_id": document_id, "idx": chunk_index, "content": content, "emb": emb_str},
         )
@@ -74,11 +74,11 @@ class ChatbotRepository:
         result = await self._db.execute(
             text(
                 "SELECT dc.content, dc.chunk_index, d.title, "
-                "1 - (dc.embedding <=> :emb::vector) AS similarity "
+                "1 - (dc.embedding <=> CAST(:emb AS vector)) AS similarity "
                 "FROM document_chunks dc "
                 "JOIN documents d ON dc.document_id = d.id "
                 "WHERE d.condominium_id = :cid "
-                "ORDER BY dc.embedding <=> :emb::vector "
+                "ORDER BY dc.embedding <=> CAST(:emb AS vector) "
                 "LIMIT :lim"
             ),
             {"cid": str(cid), "emb": emb_str, "lim": limit},
@@ -171,7 +171,7 @@ class ChatbotRepository:
         return result.scalars().first()
 
     async def latest_news(self, cid: UUID, limit: int = 5) -> list[NewsBoard]:
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         result = await self._db.execute(
             select(NewsBoard).where(
                 NewsBoard.condominium_id == cid, NewsBoard.is_published.is_(True),

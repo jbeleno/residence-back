@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import hash_password
 from app.models.core import Condominium, Role, User, UserCondominiumRole
 from app.models.email_pin import EmailPin
 
@@ -85,7 +86,7 @@ class AuthRepository:
         return pin
 
     async def get_valid_pin(self, user_id: UUID, pin_code: str, pin_type: str) -> EmailPin | None:
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         result = await self._db.execute(
             select(EmailPin).where(
                 EmailPin.user_id == user_id,
@@ -96,6 +97,31 @@ class AuthRepository:
             )
         )
         return result.scalars().first()
+
+    async def create_user(
+        self, full_name: str, email: str, password: str, phone: str | None = None,
+    ) -> User:
+        user = User(
+            full_name=full_name,
+            email=email,
+            password_hash=hash_password(password),
+            phone=phone,
+        )
+        self._db.add(user)
+        await self._db.flush()
+        return user
+
+    async def assign_condominium_role(
+        self, user_id: UUID, condominium_id: UUID, role_id: int = 4,
+    ) -> None:
+        """Assign user to a condominium with a role (default: residente, role_id=4)."""
+        ucr = UserCondominiumRole(
+            user_id=user_id,
+            condominium_id=condominium_id,
+            role_id=role_id,
+        )
+        self._db.add(ucr)
+        await self._db.flush()
 
     async def mark_pin_used(self, pin: EmailPin) -> None:
         pin.used = True

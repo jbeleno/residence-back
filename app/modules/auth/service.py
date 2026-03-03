@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from app.core.config import settings
 from app.core.email import generate_pin, send_pin_email
@@ -14,6 +14,7 @@ from app.schemas.auth import (
     CondominiumRoleOut,
     LoginDataOut,
     LoginRequest,
+    RegisterRequest,
     RequestPasswordResetRequest,
     RequestPinRequest,
     ResetPasswordRequest,
@@ -22,6 +23,7 @@ from app.schemas.auth import (
     VerifyEmailRequest,
     VerifyLoginPinRequest,
 )
+from app.core.exceptions import ConflictError
 
 
 class AuthService:
@@ -39,7 +41,7 @@ class AuthService:
         await self._repo.invalidate_existing_pins(user.id, pin_type)
 
         pin = generate_pin()
-        expires = datetime.now(timezone.utc) + timedelta(minutes=settings.PIN_EXPIRE_MINUTES)
+        expires = datetime.utcnow() + timedelta(minutes=settings.PIN_EXPIRE_MINUTES)
         await self._repo.create_pin(user.id, pin, pin_type, expires)
         await self._repo.save()
 
@@ -63,6 +65,36 @@ class AuthService:
         return user
 
     # ══════════════════════════════════════════════════════════════════════
+    #  Registration
+    # ══════════════════════════════════════════════════════════════════════
+
+    async def register(self, body: RegisterRequest) -> dict:
+        """Register a new user. Optionally assign to a condominium."""
+        existing = await self._repo.get_user_by_email(body.email)
+        if existing is not None:
+            raise ConflictError("Ya existe una cuenta con ese correo electrónico")
+
+        user = await self._repo.create_user(
+            full_name=body.full_name,
+            email=body.email,
+            password=body.password,
+            phone=body.phone,
+        )
+
+        if body.condominium_id:
+            await self._repo.assign_condominium_role(
+                user.id, body.condominium_id, role_id=4,  # residente
+            )
+
+        await self._repo.save()
+
+        return {
+            "user_id": str(user.id),
+            "email": user.email,
+            "message": "Cuenta creada exitosamente. Puede iniciar sesión.",
+        }
+
+    # ══════════════════════════════════════════════════════════════════════
     #  FLOW 1 – Login with PIN (2-step)
     # ══════════════════════════════════════════════════════════════════════
 
@@ -82,7 +114,7 @@ class AuthService:
         if not user.is_active:
             raise ForbiddenError("Usuario inactivo")
 
-        user.last_login_at = datetime.now(timezone.utc)
+        user.last_login_at = datetime.utcnow()
         await self._repo.save()
 
         ucr_rows = await self._repo.get_user_condominium_roles(user.id)

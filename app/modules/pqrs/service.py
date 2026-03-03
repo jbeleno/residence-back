@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from app.core.enums import PqrStatusEnum
@@ -52,7 +52,7 @@ class PqrService:
         if "pqr_status_id" in data:
             resolved = await self._repo.get_status_by_code("resuelto")
             if resolved and data["pqr_status_id"] == resolved.id:
-                pqr.resolved_at = datetime.now(timezone.utc)
+                pqr.resolved_at = datetime.utcnow()
 
         for k, v in data.items():
             setattr(pqr, k, v)
