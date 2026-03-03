@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, time
 
 from pydantic import BaseModel
 
@@ -17,8 +17,8 @@ class AmenityCreate(BaseModel):
     requires_approval: bool = False
     min_hours: int = 1
     max_hours: int = 8
-    available_from: str | None = None
-    available_until: str | None = None
+    available_from: time | None = None
+    available_until: time | None = None
 
 
 class AmenityUpdate(BaseModel):
@@ -29,8 +29,8 @@ class AmenityUpdate(BaseModel):
     requires_approval: bool | None = None
     min_hours: int | None = None
     max_hours: int | None = None
-    available_from: str | None = None
-    available_until: str | None = None
+    available_from: time | None = None
+    available_until: time | None = None
     is_active: bool | None = None
 
 
@@ -44,8 +44,8 @@ class AmenityOut(BaseModel):
     requires_approval: bool = False
     min_hours: int = 1
     max_hours: int = 8
-    available_from: str | None = None
-    available_until: str | None = None
+    available_from: time | None = None
+    available_until: time | None = None
     is_active: bool = True
     created_at: datetime | None = None
 
@@ -72,7 +72,7 @@ class BookingOut(BaseModel):
     booked_by: UUID
     booked_by_name: str | None = None
     booking_status_id: int
-    booking_status: str | None = None
+    booking_status_name: str | None = None
     start_time: datetime
     end_time: datetime
     total_cost: float = 0
