@@ -120,9 +120,19 @@ python -m pytest tests/ -q
 python -m pytest tests/ --tb=short -v  # con detalle
 ```
 
-## Documentacion API
+## API en Produccion
 
-Con la app corriendo:
+El backend esta desplegado en:
+
+- **Swagger UI** (interactivo, probar endpoints): http://3.227.231.47/docs
+- **ReDoc** (lectura limpia): http://3.227.231.47/redoc
+- **OpenAPI JSON** (generar clients/SDKs): http://3.227.231.47/openapi.json
+
+> **Nota:** HTTP plano (sin TLS). Para produccion real con apps moviles, configurar un dominio con HTTPS (Let's Encrypt).
+
+## Documentacion API Local
+
+Con la app corriendo localmente:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
