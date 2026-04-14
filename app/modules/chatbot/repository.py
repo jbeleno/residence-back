@@ -167,7 +167,7 @@ class ChatbotRepository:
         return list(result.scalars().all())
 
     async def get_overdue_status(self) -> PaymentStatus | None:
-        result = await self._db.execute(select(PaymentStatus).where(PaymentStatus.code == "en_mora"))
+        result = await self._db.execute(select(PaymentStatus).where(PaymentStatus.code == "vencido"))
         return result.scalars().first()
 
     async def latest_news(self, cid: UUID, limit: int = 5) -> list[NewsBoard]:

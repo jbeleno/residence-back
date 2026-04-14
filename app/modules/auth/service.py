@@ -182,6 +182,17 @@ class AuthService:
             for _ucr, condo, role in ucr_rows
         ]
 
+        prop_rows = await self._repo.get_user_properties(user.id)
+        properties = [
+            UserPropertyOut(
+                property_id=prop.id,
+                property_number=prop.number,
+                block=prop.block,
+                condominium_id=prop.condominium_id,
+            )
+            for _up, prop in prop_rows
+        ]
+
         access_token: str | None = None
         message: str | None = None
 
@@ -201,7 +212,9 @@ class AuthService:
             user_id=user.id,
             full_name=user.full_name,
             email=user.email,
+            phone=user.phone,
             condominiums=condominiums,
+            properties=properties,
             access_token=access_token,
             message=message,
         )
