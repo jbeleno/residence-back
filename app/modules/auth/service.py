@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 
 from app.core.config import settings
 from app.core.email import generate_pin, send_pin_email
+
+logger = logging.getLogger(__name__)
 from app.core.exceptions import BadRequestError, ForbiddenError, UnauthorizedError
 from app.core.security import create_access_token, hash_password, verify_password
 from app.modules.auth.repository import AuthRepository
@@ -20,6 +23,7 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     SelectCondominiumRequest,
     TokenResponse,
+    UserPropertyOut,
     VerifyEmailRequest,
     VerifyLoginPinRequest,
 )
@@ -46,7 +50,10 @@ class AuthService:
         await self._repo.save()
 
         # Send email (sync SMTP – fast enough for transactional emails)
-        send_pin_email(user.email, pin, pin_type, user.full_name)
+        if settings.DEBUG:
+            logger.warning("🔑 [DEV] PIN for %s (%s): %s", email, pin_type, pin)
+        else:
+            send_pin_email(user.email, pin, pin_type, user.full_name)
 
         return {
             "message": f"Código enviado a {email}. Expira en {settings.PIN_EXPIRE_MINUTES} minutos.",
@@ -98,15 +105,63 @@ class AuthService:
     #  FLOW 1 – Login with PIN (2-step)
     # ══════════════════════════════════════════════════════════════════════
 
-    async def login_step1(self, body: LoginRequest) -> dict:
-        """Validate credentials and send login PIN."""
+    async def login_step1(self, body: LoginRequest) -> LoginDataOut:
+        """Validate credentials and issue JWT directly."""
         user = await self._repo.get_user_by_email(body.email)
         if user is None or not verify_password(body.password, user.password_hash):
             raise UnauthorizedError("Credenciales inválidas")
         if not user.is_active:
             raise ForbiddenError("Usuario inactivo")
 
-        return await self._send_pin(body.email, "login")
+        user.last_login_at = datetime.utcnow()
+        await self._repo.save()
+
+        ucr_rows = await self._repo.get_user_condominium_roles(user.id)
+        condominiums = [
+            CondominiumRoleOut(
+                condominium_id=condo.id,
+                condominium_name=condo.name,
+                role=role.role_name,
+            )
+            for _ucr, condo, role in ucr_rows
+        ]
+
+        prop_rows = await self._repo.get_user_properties(user.id)
+        properties = [
+            UserPropertyOut(
+                property_id=prop.id,
+                property_number=prop.number,
+                block=prop.block,
+                condominium_id=prop.condominium_id,
+            )
+            for _up, prop in prop_rows
+        ]
+
+        access_token: str | None = None
+        message: str | None = None
+
+        if len(condominiums) == 1:
+            c = condominiums[0]
+            access_token = create_access_token(
+                {"sub": str(user.id), "cid": str(c.condominium_id), "role": c.role}
+            )
+        elif len(condominiums) > 1:
+            access_token = create_access_token({"sub": str(user.id)})
+            message = "Seleccione un condominio para continuar."
+        else:
+            access_token = create_access_token({"sub": str(user.id)})
+            message = "No tiene condominios asignados. Contacte al administrador."
+
+        return LoginDataOut(
+            user_id=user.id,
+            full_name=user.full_name,
+            email=user.email,
+            phone=user.phone,
+            condominiums=condominiums,
+            properties=properties,
+            access_token=access_token,
+            message=message,
+        )
 
     async def login_step2(self, body: VerifyLoginPinRequest) -> LoginDataOut:
         """Verify login PIN and issue JWT."""
@@ -217,10 +272,22 @@ class AuthService:
             )
             for _ucr, condo, role in ucr_rows
         ]
+        prop_rows = await self._repo.get_user_properties(user.id)
+        properties = [
+            UserPropertyOut(
+                property_id=prop.id,
+                property_number=prop.number,
+                block=prop.block,
+                condominium_id=prop.condominium_id,
+            )
+            for _up, prop in prop_rows
+        ]
         return LoginDataOut(
             user_id=user.id,
             full_name=user.full_name,
             email=user.email,
+            phone=user.phone,
             condominiums=condominiums,
+            properties=properties,
             access_token=token,
         )

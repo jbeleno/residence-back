@@ -17,7 +17,7 @@ from app.core.dependencies import (
 from app.core.responses import success
 from app.modules.visitors.repository import VisitorRepository
 from app.modules.visitors.service import VisitorService
-from app.schemas.visitor import VisitorLogCreate
+from app.schemas.visitor import ResidentVisitorCreate, VisitorLogCreate
 
 router = APIRouter(prefix="/visitors", tags=["Portería / Visitantes"])
 
@@ -41,9 +41,18 @@ async def list_visitors(
 @router.get("/active", dependencies=[Depends(require_authenticated)])
 async def list_active_visitors(
     cid: UUID = Depends(get_current_condominium_id),
+    property_id: UUID | None = None,
     svc: VisitorService = Depends(_service),
 ):
-    return success(await svc.list_active(cid))
+    return success(await svc.list_active(cid, property_id=property_id))
+
+
+@router.get("/pending", dependencies=[Depends(require_admin_or_guard)])
+async def list_pending_visitors(
+    cid: UUID = Depends(get_current_condominium_id),
+    svc: VisitorService = Depends(_service),
+):
+    return success(await svc.list_pending(cid))
 
 
 @router.get("/{visitor_id}", dependencies=[Depends(require_authenticated)])
@@ -55,6 +64,16 @@ async def get_visitor(
     return success(await svc.get_visitor(visitor_id, cid))
 
 
+@router.post("/me", dependencies=[Depends(require_authenticated)], status_code=201)
+async def resident_register_visitor(
+    body: ResidentVisitorCreate,
+    cid: UUID = Depends(get_current_condominium_id),
+    current_user=Depends(get_current_user),
+    svc: VisitorService = Depends(_service),
+):
+    return success(await svc.resident_register_entry(body, cid, current_user))
+
+
 @router.post("/", dependencies=[Depends(require_admin_or_guard)], status_code=201)
 async def register_visitor_entry(
     body: VisitorLogCreate,
@@ -63,6 +82,25 @@ async def register_visitor_entry(
     svc: VisitorService = Depends(_service),
 ):
     return success(await svc.register_entry(body, cid, current_user.id))
+
+
+@router.post("/{visitor_id}/confirm-entry", dependencies=[Depends(require_admin_or_guard)])
+async def confirm_visitor_entry(
+    visitor_id: UUID,
+    cid: UUID = Depends(get_current_condominium_id),
+    svc: VisitorService = Depends(_service),
+):
+    return success(await svc.confirm_entry(visitor_id, cid))
+
+
+@router.post("/me/{visitor_id}/exit", dependencies=[Depends(require_authenticated)])
+async def resident_register_visitor_exit(
+    visitor_id: UUID,
+    cid: UUID = Depends(get_current_condominium_id),
+    current_user=Depends(get_current_user),
+    svc: VisitorService = Depends(_service),
+):
+    return success(await svc.resident_register_exit(visitor_id, cid, current_user))
 
 
 @router.post("/{visitor_id}/exit", dependencies=[Depends(require_admin_or_guard)])

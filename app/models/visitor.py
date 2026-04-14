@@ -39,7 +39,7 @@ class VisitorLog(TenantModel, TimestampCreatedMixin, Base):
     registered_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"),
     )
-    entry_time: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    entry_time: Mapped[Optional[datetime]] = mapped_column(nullable=True, default=None)
     exit_time: Mapped[Optional[datetime]] = mapped_column()
     notes: Mapped[Optional[str]] = mapped_column(Text)
 

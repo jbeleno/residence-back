@@ -54,6 +54,7 @@ class AmenityRepository:
         *,
         amenity_id: int | None = None,
         status_id: int | None = None,
+        booked_by: UUID | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> list[AmenityBooking]:
@@ -71,6 +72,8 @@ class AmenityRepository:
             stmt = stmt.where(AmenityBooking.amenity_id == amenity_id)
         if status_id:
             stmt = stmt.where(AmenityBooking.booking_status_id == status_id)
+        if booked_by:
+            stmt = stmt.where(AmenityBooking.booked_by == booked_by)
         stmt = stmt.order_by(AmenityBooking.start_time.desc()).offset(offset).limit(limit)
         result = await self._db.execute(stmt)
         return list(result.scalars().all())

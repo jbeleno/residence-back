@@ -30,17 +30,14 @@ class UserService:
         if existing:
             raise ConflictError("El email ya está registrado")
 
-        user_data = body.model_dump(exclude={"password", "role_name", "condominium_id"})
+        user_data = body.model_dump(exclude={"password", "role_id", "condominium_id"})
         user = User(**user_data, password_hash=hash_password(body.password))
         user = await self._repo.create_user(user)
 
         # Assign role
-        role = await self._repo.get_role_by_name(body.role_name)
-        if not role:
-            raise BadRequestError(f"Rol '{body.role_name}' no existe")
-
+        role_id = body.role_id or 4  # default: residente
         target_cid = body.condominium_id or cid
-        ucr = UserCondominiumRole(user_id=user.id, condominium_id=target_cid, role_id=role.id)
+        ucr = UserCondominiumRole(user_id=user.id, condominium_id=target_cid, role_id=role_id)
         await self._repo.create_ucr(ucr)
         await self._repo.commit_and_refresh(user)
         return user

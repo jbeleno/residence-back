@@ -66,6 +66,19 @@ async def update_amenity(
 # ── Bookings ──────────────────────────────────────────────────────────────
 
 
+@router.get("/bookings/me")
+async def list_my_bookings(
+    cid: UUID = Depends(get_current_condominium_id),
+    current_user=Depends(get_current_user),
+    amenity_id: int | None = None,
+    status_id: int | None = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    svc: AmenityService = Depends(_service),
+):
+    return success(await svc.list_my_bookings(cid, current_user.id, amenity_id, status_id, skip, limit))
+
+
 @router.get("/bookings/all", dependencies=[Depends(require_authenticated)])
 async def list_bookings(
     cid: UUID = Depends(get_current_condominium_id),
@@ -97,3 +110,13 @@ async def update_booking_status(
     svc: AmenityService = Depends(_service),
 ):
     return success(await svc.update_booking_status(booking_id, body, cid, current_user.id))
+
+
+@router.patch("/bookings/{booking_id}/cancel")
+async def cancel_own_booking(
+    booking_id: UUID,
+    cid: UUID = Depends(get_current_condominium_id),
+    current_user=Depends(get_current_user),
+    svc: AmenityService = Depends(_service),
+):
+    return success(await svc.cancel_own_booking(booking_id, cid, current_user.id))

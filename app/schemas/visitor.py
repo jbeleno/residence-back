@@ -19,6 +19,13 @@ class VisitorLogCreate(BaseModel):
     notes: str | None = None
 
 
+class ResidentVisitorCreate(BaseModel):
+    visitor_name: str
+    document_number: str | None = None
+    vehicle_plate: str | None = None
+    notes: str | None = None
+
+
 class VisitorLogExit(BaseModel):
     exit_time: datetime | None = None
 
@@ -33,10 +40,14 @@ class VisitorLogOut(BaseModel):
     is_guest: bool = False
     vehicle_plate: str | None = None
     authorized_by: UUID | None = None
+    authorized_by_name: str | None = None
     registered_by: UUID | None = None
-    entry_time: datetime
+    entry_time: datetime | None = None
     exit_time: datetime | None = None
     notes: str | None = None
     created_at: datetime | None = None
+    property_number: str | None = None
+    document_type_name: str | None = None
+    status: str | None = None
 
     model_config = {"from_attributes": True}

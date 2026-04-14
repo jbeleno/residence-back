@@ -54,6 +54,13 @@ class AmenityService:
         )
         return [self._booking_out(b) for b in bookings]
 
+    async def list_my_bookings(self, cid, user_id, amenity_id, status_id, offset, limit):
+        bookings = await self._repo.list_bookings(
+            cid, amenity_id=amenity_id, status_id=status_id,
+            booked_by=user_id, offset=offset, limit=limit
+        )
+        return [self._booking_out(b) for b in bookings]
+
     async def create_booking(self, body: BookingCreate, cid: UUID, user_id: UUID):
         amenity = await self._repo.get_amenity(body.amenity_id, cid)
         if not amenity:
@@ -90,11 +97,11 @@ class AmenityService:
         if not booking:
             raise NotFoundError("Reserva no encontrada")
 
-        new_status = await self._repo.get_booking_status_by_id(body.booking_status_id)
+        new_status = await self._repo.get_booking_status_by_code(body.status_code)
         if not new_status:
             raise BadRequestError("Estado no válido")
 
-        booking.booking_status_id = body.booking_status_id
+        booking.booking_status_id = new_status.id
 
         if new_status.code == "aprobada":
             booking.approved_by = user_id
@@ -102,6 +109,29 @@ class AmenityService:
         elif new_status.code == "cancelada":
             booking.cancelled_by = user_id
             booking.cancelled_at = datetime.utcnow()
+
+        await self._repo.commit()
+        await self._repo.refresh(booking)
+        return self._booking_out(booking)
+
+    async def cancel_own_booking(
+        self, booking_id: UUID, cid: UUID, user_id: UUID
+    ):
+        booking = await self._repo.get_booking(booking_id, cid)
+        if not booking:
+            raise NotFoundError("Reserva no encontrada")
+        if booking.booked_by != user_id:
+            raise BadRequestError("Solo puedes cancelar tus propias reservas")
+        if booking.booking_status.code not in ("pendiente", "aprobada"):
+            raise BadRequestError("Esta reserva no se puede cancelar")
+
+        cancelada = await self._repo.get_booking_status_by_code("cancelada")
+        if not cancelada:
+            raise BadRequestError("Estado 'cancelada' no encontrado")
+
+        booking.booking_status_id = cancelada.id
+        booking.cancelled_by = user_id
+        booking.cancelled_at = datetime.utcnow()
 
         await self._repo.commit()
         await self._repo.refresh(booking)

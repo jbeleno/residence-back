@@ -47,9 +47,9 @@ async def register(body: RegisterRequest, svc: AuthService = Depends(_service)):
 
 @router.post("/login")
 async def login_step1(body: LoginRequest, svc: AuthService = Depends(_service)):
-    """Step 1: validate credentials → send PIN to email."""
+    """Validate credentials and return JWT directly."""
     data = await svc.login_step1(body)
-    return success(data)
+    return success(data.model_dump())
 
 
 @router.post("/login/verify-pin")

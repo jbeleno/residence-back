@@ -31,6 +31,7 @@ class PqrOut(BaseModel):
     reported_by: UUID
     reporter_name: str | None = None
     assigned_to: UUID | None = None
+    assignee_name: str | None = None
     pqr_type_id: int
     pqr_type_name: str | None = None
     priority_id: int
@@ -42,6 +43,7 @@ class PqrOut(BaseModel):
     resolution: str | None = None
     resolved_at: datetime | None = None
     created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

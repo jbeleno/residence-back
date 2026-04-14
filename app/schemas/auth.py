@@ -28,11 +28,20 @@ class CondominiumRoleOut(BaseModel):
     role: str
 
 
+class UserPropertyOut(BaseModel):
+    property_id: UUID
+    property_number: str
+    block: str | None = None
+    condominium_id: UUID
+
+
 class LoginDataOut(BaseModel):
     user_id: UUID
     full_name: str
     email: str
+    phone: str | None = None
     condominiums: list[CondominiumRoleOut] = []
+    properties: list[UserPropertyOut] = []
     access_token: str | None = None
     message: str | None = None
 

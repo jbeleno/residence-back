@@ -8,7 +8,7 @@ from uuid import UUID
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.visitor import VisitorLog
 from app.modules.visitors.repository import VisitorRepository
-from app.schemas.visitor import VisitorLogCreate, VisitorLogOut
+from app.schemas.visitor import ResidentVisitorCreate, VisitorLogCreate, VisitorLogOut
 
 
 class VisitorService:
@@ -21,8 +21,13 @@ class VisitorService:
         )
         return [self._out(v) for v in visitors]
 
-    async def list_active(self, cid: UUID):
-        visitors = await self._repo.list_visitors(cid, active_only=True)
+    async def list_active(self, cid: UUID, *, property_id: UUID | None = None):
+        visitors = await self._repo.list_visitors(cid, active_only=True, property_id=property_id)
+        return [self._out(v) for v in visitors]
+
+    async def list_pending(self, cid: UUID):
+        """List pre-registered visitors (entry_time is NULL)."""
+        visitors = await self._repo.list_pending(cid)
         return [self._out(v) for v in visitors]
 
     async def get_visitor(self, visitor_id: UUID, cid: UUID):
@@ -31,14 +36,67 @@ class VisitorService:
             raise NotFoundError("Registro de visitante no encontrado")
         return self._out(v)
 
+    async def resident_register_entry(self, body: ResidentVisitorCreate, cid: UUID, user):
+        """Resident pre-registers a visitor (no entry_time yet)."""
+        user_property_ids = await self._repo.get_user_property_ids_in_condo(user.id, cid)
+        if not user_property_ids:
+            raise BadRequestError("No tienes una propiedad asignada en este conjunto")
+
+        property_id = next(iter(user_property_ids))
+        visitor = VisitorLog(
+            condominium_id=cid,
+            property_id=property_id,
+            registered_by=user.id,
+            authorized_by=user.id,
+            visitor_name=body.visitor_name,
+            document_number=body.document_number,
+            vehicle_plate=body.vehicle_plate,
+            notes=body.notes,
+            is_guest=True,
+            # entry_time stays None → pre-registered
+        )
+        visitor = await self._repo.create(visitor)
+        return self._out(visitor)
+
     async def register_entry(self, body: VisitorLogCreate, cid: UUID, user_id: UUID):
+        """Admin/guard registers a visitor with immediate entry."""
         visitor = VisitorLog(
             condominium_id=cid,
             registered_by=user_id,
+            entry_time=datetime.utcnow(),
             **body.model_dump(),
         )
         visitor = await self._repo.create(visitor)
         return self._out(visitor)
+
+    async def confirm_entry(self, visitor_id: UUID, cid: UUID):
+        """Admin/guard confirms a pre-registered visitor has arrived."""
+        v = await self._repo.get_by_id(visitor_id, cid)
+        if not v:
+            raise NotFoundError("Visitante no encontrado")
+        if v.entry_time:
+            raise BadRequestError("Ya se confirmó la entrada de este visitante")
+        v.entry_time = datetime.utcnow()
+        await self._repo.commit()
+        await self._repo.refresh(v)
+        return self._out(v)
+
+    async def resident_register_exit(self, visitor_id: UUID, cid: UUID, user):
+        """Resident marks their own visitor as exited."""
+        v = await self._repo.get_by_id(visitor_id, cid)
+        if not v:
+            raise NotFoundError("Visitante no encontrado")
+        user_property_ids = await self._repo.get_user_property_ids_in_condo(user.id, cid)
+        if v.property_id not in user_property_ids:
+            raise BadRequestError("Solo puedes registrar salida de tus propios visitantes")
+        if not v.entry_time:
+            raise BadRequestError("El visitante aún no ha ingresado")
+        if v.exit_time:
+            raise BadRequestError("El visitante ya registró salida")
+        v.exit_time = datetime.utcnow()
+        await self._repo.commit()
+        await self._repo.refresh(v)
+        return self._out(v)
 
     async def register_exit(self, visitor_id: UUID, cid: UUID):
         v = await self._repo.get_by_id(visitor_id, cid)
@@ -53,6 +111,13 @@ class VisitorService:
 
     @staticmethod
     def _out(v: VisitorLog) -> dict:
+        if v.entry_time is None:
+            status = 'pre_registered'
+        elif v.exit_time is None:
+            status = 'active'
+        else:
+            status = 'exited'
+
         return VisitorLogOut(
             id=v.id,
             condominium_id=v.condominium_id,
@@ -71,4 +136,5 @@ class VisitorService:
             exit_time=v.exit_time,
             notes=v.notes,
             created_at=v.created_at,
+            status=status,
         ).model_dump()

@@ -77,8 +77,16 @@ class PropertyRepository:
         up = UserProperty(**data)
         self._db.add(up)
         await self._db.commit()
-        await self._db.refresh(up)
-        return up
+        # Re-fetch with eager-loaded relationships
+        result = await self._db.execute(
+            select(UserProperty)
+            .options(
+                selectinload(UserProperty.relation_type),
+                selectinload(UserProperty.user),
+            )
+            .where(UserProperty.id == up.id)
+        )
+        return result.scalars().first()  # type: ignore[return-value]
 
     async def get_assignment_by_id(self, aid: int) -> UserProperty | None:
         result = await self._db.execute(

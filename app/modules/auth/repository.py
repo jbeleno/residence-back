@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
-from app.models.core import Condominium, Role, User, UserCondominiumRole
+from app.models.core import Condominium, Property, Role, User, UserCondominiumRole, UserProperty
 from app.models.email_pin import EmailPin
 
 
@@ -125,6 +125,19 @@ class AuthRepository:
 
     async def mark_pin_used(self, pin: EmailPin) -> None:
         pin.used = True
+
+    async def get_user_properties(self, user_id: UUID) -> list[tuple[UserProperty, Property]]:
+        stmt = (
+            select(UserProperty, Property)
+            .join(Property, UserProperty.property_id == Property.id)
+            .where(
+                UserProperty.user_id == user_id,
+                UserProperty.is_active.is_(True),
+                Property.deleted_at.is_(None),
+            )
+        )
+        result = await self._db.execute(stmt)
+        return result.all()  # type: ignore[return-value]
 
     async def save(self) -> None:
         await self._db.commit()
