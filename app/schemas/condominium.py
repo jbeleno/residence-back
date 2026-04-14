@@ -39,6 +39,19 @@ class CondominiumUpdate(BaseModel):
     visitor_parking_hourly_rate: float | None = None
 
 
+class CondominiumFeaturedOut(BaseModel):
+    id: UUID
+    name: str
+    address: str | None = None
+    city: str | None = None
+    department: str | None = None
+    logo_url: str | None = None
+    total_properties: int = 0
+    total_towers: int = 0
+
+    model_config = {"from_attributes": True}
+
+
 class CondominiumOut(BaseModel):
     id: UUID
     name: str

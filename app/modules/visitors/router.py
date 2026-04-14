@@ -17,13 +17,22 @@ from app.core.dependencies import (
 from app.core.responses import success
 from app.modules.visitors.repository import VisitorRepository
 from app.modules.visitors.service import VisitorService
-from app.schemas.visitor import ResidentVisitorCreate, VisitorLogCreate
+from app.schemas.visitor import PublicVisitorPreregister, ResidentVisitorCreate, VisitorLogCreate
 
 router = APIRouter(prefix="/visitors", tags=["Portería / Visitantes"])
 
 
 def _service(db: AsyncSession = Depends(get_db)) -> VisitorService:
     return VisitorService(VisitorRepository(db))
+
+
+@router.post("/preregister", status_code=201)
+async def public_preregister_visitor(
+    body: PublicVisitorPreregister,
+    svc: VisitorService = Depends(_service),
+):
+    """Pre-registro público de visitante (sin autenticación)."""
+    return success(await svc.public_preregister(body))
 
 
 @router.get("/", dependencies=[Depends(require_authenticated)])

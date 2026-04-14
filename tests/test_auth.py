@@ -42,6 +42,7 @@ def _mock_user(
     user.full_name = full_name
     user.is_active = is_active
     user.email_verified = email_verified
+    user.phone = None
     user.last_login_at = None
     return user
 
@@ -52,6 +53,7 @@ def _mock_repo() -> AsyncMock:
     repo.invalidate_existing_pins = AsyncMock()
     repo.create_pin = AsyncMock()
     repo.mark_pin_used = AsyncMock()
+    repo.get_user_properties = AsyncMock(return_value=[])
     return repo
 
 
@@ -75,21 +77,24 @@ def _mock_condo(name: str = "Condo A"):
 
 
 class TestLoginStep1:
-    @patch("app.modules.auth.service.send_pin_email")
     @pytest.mark.asyncio
-    async def test_success(self, mock_send):
+    async def test_success(self):
         user = _mock_user(password="correct")
+        condo = _mock_condo()
+        role = _mock_role("admin")
+        ucr = MagicMock()
+
         repo = _mock_repo()
         repo.get_user_by_email = AsyncMock(return_value=user)
+        repo.get_user_condominium_roles = AsyncMock(return_value=[(ucr, condo, role)])
 
         svc = AuthService(repo)
         body = LoginRequest(email="test@x.com", password="correct")
         result = await svc.login_step1(body)
 
-        assert "Código enviado" in result["message"]
-        repo.invalidate_existing_pins.assert_called_once()
-        repo.create_pin.assert_called_once()
-        mock_send.assert_called_once()
+        assert result.user_id == user.id
+        assert result.access_token is not None
+        assert len(result.condominiums) == 1
 
     @pytest.mark.asyncio
     async def test_wrong_password(self):
@@ -114,12 +119,12 @@ class TestLoginStep1:
         with pytest.raises(UnauthorizedError):
             await svc.login_step1(body)
 
-    @patch("app.modules.auth.service.send_pin_email")
     @pytest.mark.asyncio
-    async def test_inactive_user(self, mock_send):
+    async def test_inactive_user(self):
         user = _mock_user(password="pass", is_active=False)
         repo = _mock_repo()
         repo.get_user_by_email = AsyncMock(return_value=user)
+        repo.get_user_condominium_roles = AsyncMock(return_value=[])
 
         svc = AuthService(repo)
         body = LoginRequest(email="test@x.com", password="pass")
@@ -168,6 +173,7 @@ class TestLoginStep2:
         repo.get_user_condominium_roles = AsyncMock(
             return_value=[(MagicMock(), condo1, role), (MagicMock(), condo2, role)]
         )
+        repo.get_user_properties = AsyncMock(return_value=[])
 
         svc = AuthService(repo)
         body = VerifyLoginPinRequest(email="test@x.com", pin="123456")
@@ -352,6 +358,7 @@ class TestGetMe:
         repo.get_user_condominium_roles = AsyncMock(
             return_value=[(MagicMock(), condo, role)]
         )
+        repo.get_user_properties = AsyncMock(return_value=[])
 
         svc = AuthService(repo)
         result = await svc.get_me(user, "fake_token")

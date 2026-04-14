@@ -116,7 +116,6 @@ class TestCreateUser:
         cid = _uid()
         repo = _repo()
         repo.get_by_email.return_value = None
-        repo.get_role_by_name.return_value = _mock_role()
 
         created = _mock_user()
         repo.create_user.return_value = created
@@ -124,7 +123,7 @@ class TestCreateUser:
         body = MagicMock()
         body.model_dump.return_value = {"full_name": "X", "email": "x@x.com"}
         body.password = "secret"
-        body.role_name = "admin"
+        body.role_id = 2
         body.condominium_id = None
         body.email = "x@x.com"
 
@@ -149,22 +148,25 @@ class TestCreateUser:
             await svc.create_user(body, _uid())
 
     @pytest.mark.asyncio
-    async def test_invalid_role(self):
+    async def test_default_role(self):
+        """When no role_id is provided, default to residente (4)."""
         repo = _repo()
         repo.get_by_email.return_value = None
-        repo.get_role_by_name.return_value = None
-        repo.create_user.return_value = _mock_user()
+        created = _mock_user()
+        repo.create_user.return_value = created
 
         body = MagicMock()
         body.model_dump.return_value = {"full_name": "X", "email": "x@x.com"}
         body.password = "secret"
-        body.role_name = "nonexistent"
+        body.role_id = None
         body.condominium_id = None
         body.email = "x@x.com"
 
         svc = UserService(repo)
-        with pytest.raises(BadRequestError, match="no existe"):
-            await svc.create_user(body, _uid())
+        cid = _uid()
+        result = await svc.create_user(body, cid)
+        assert result == created
+        repo.create_ucr.assert_awaited_once()
 
 
 # ══════════════════════════════════════════════════════════════════════════

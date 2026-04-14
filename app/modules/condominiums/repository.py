@@ -4,15 +4,53 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.core import Condominium
+from app.models.core import Condominium, Property
 
 
 class CondominiumRepository:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
+
+    async def list_featured(
+        self, *, limit: int = 10, city: str | None = None,
+    ) -> list[dict]:
+        """List active condominiums with property/tower counts."""
+        stmt = (
+            select(
+                Condominium.id,
+                Condominium.name,
+                Condominium.address,
+                Condominium.city,
+                Condominium.department,
+                Condominium.logo_url,
+                func.count(Property.id).label("total_properties"),
+                func.count(func.distinct(Property.block)).label("total_towers"),
+            )
+            .outerjoin(
+                Property,
+                (Property.condominium_id == Condominium.id)
+                & (Property.deleted_at.is_(None))
+                & (Property.is_active.is_(True)),
+            )
+            .where(Condominium.deleted_at.is_(None))
+            .group_by(Condominium.id)
+            .order_by(Condominium.name)
+            .limit(limit)
+        )
+        if city:
+            stmt = stmt.where(Condominium.city.ilike(f"%{city}%"))
+        result = await self._db.execute(stmt)
+        return [row._asdict() for row in result.all()]
+
+    async def count_featured(self, *, city: str | None = None) -> int:
+        stmt = select(func.count(Condominium.id)).where(Condominium.deleted_at.is_(None))
+        if city:
+            stmt = stmt.where(Condominium.city.ilike(f"%{city}%"))
+        result = await self._db.execute(stmt)
+        return result.scalar_one()
 
     async def list_all(self, *, offset: int = 0, limit: int = 50) -> list[Condominium]:
         stmt = (

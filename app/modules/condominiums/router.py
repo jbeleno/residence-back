@@ -16,13 +16,32 @@ from app.core.dependencies import (
 from app.core.responses import success, success_list
 from app.modules.condominiums.repository import CondominiumRepository
 from app.modules.condominiums.service import CondominiumService
-from app.schemas.condominium import CondominiumCreate, CondominiumOut, CondominiumUpdate
+from app.schemas.condominium import (
+    CondominiumCreate,
+    CondominiumFeaturedOut,
+    CondominiumOut,
+    CondominiumUpdate,
+)
 
 router = APIRouter(prefix="/condominiums", tags=["Condominios"])
 
 
 def _service(db: AsyncSession = Depends(get_db)) -> CondominiumService:
     return CondominiumService(CondominiumRepository(db))
+
+
+@router.get("/featured")
+async def list_featured_condominiums(
+    limit: int = Query(10, ge=1, le=50),
+    city: str | None = None,
+    svc: CondominiumService = Depends(_service),
+):
+    """Lista pública de condominios destacados (sin autenticación)."""
+    items, total = await svc.list_featured(limit, city)
+    return success_list(
+        [CondominiumFeaturedOut(**c).model_dump() for c in items],
+        total=total,
+    )
 
 
 @router.get("/", dependencies=[Depends(require_super_admin)])

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Optional, TYPE_CHECKING
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time
 
 from sqlalchemy import (
-    Boolean, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint,
+    Boolean, Date, ForeignKey, Integer, Numeric, String, Text, Time, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -39,6 +39,11 @@ class VisitorLog(TenantModel, TimestampCreatedMixin, Base):
     registered_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"),
     )
+    phone: Mapped[Optional[str]] = mapped_column(String(30))
+    reason: Mapped[Optional[str]] = mapped_column(Text)
+    expected_date: Mapped[Optional[date]] = mapped_column(Date)
+    expected_time: Mapped[Optional[time]] = mapped_column(Time)
+    reference_code: Mapped[Optional[str]] = mapped_column(String(20), unique=True)
     entry_time: Mapped[Optional[datetime]] = mapped_column(nullable=True, default=None)
     exit_time: Mapped[Optional[datetime]] = mapped_column()
     notes: Mapped[Optional[str]] = mapped_column(Text)

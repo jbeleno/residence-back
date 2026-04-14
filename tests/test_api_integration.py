@@ -182,8 +182,14 @@ class TestAuthEndpoints:
 
     @pytest.mark.asyncio
     async def test_login_step1_success(self):
+        from app.schemas.auth import LoginDataOut
         svc = AsyncMock()
-        svc.login_step1.return_value = {"message": "Código enviado al correo"}
+        svc.login_step1.return_value = LoginDataOut(
+            user_id=_uid(),
+            full_name="Test User",
+            email="a@b.com",
+            access_token="fake_token",
+        )
 
         app = _create_test_app(auth_svc=svc)
         transport = ASGITransport(app=app)
@@ -194,7 +200,7 @@ class TestAuthEndpoints:
         assert r.status_code == 200
         body = r.json()
         assert body["status"] == "success"
-        assert "Código enviado" in body["data"]["message"]
+        assert body["data"]["access_token"] == "fake_token"
 
     @pytest.mark.asyncio
     async def test_login_wrong_password(self):

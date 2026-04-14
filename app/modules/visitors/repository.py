@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.core import Property, UserProperty
+from app.models.core import Condominium, Property, UserProperty
 from app.models.visitor import VisitorLog
 
 
@@ -91,6 +91,23 @@ class VisitorRepository:
         )
         result = await self._db.execute(stmt)
         return set(result.scalars().all())
+
+    async def get_condominium(self, cid: UUID) -> Condominium | None:
+        result = await self._db.execute(
+            select(Condominium).where(Condominium.id == cid, Condominium.deleted_at.is_(None))
+        )
+        return result.scalars().first()
+
+    async def get_property_by_number(self, cid: UUID, number: str) -> Property | None:
+        result = await self._db.execute(
+            select(Property).where(
+                Property.condominium_id == cid,
+                Property.number == number,
+                Property.deleted_at.is_(None),
+                Property.is_active.is_(True),
+            )
+        )
+        return result.scalars().first()
 
     async def commit(self) -> None:
         await self._db.commit()

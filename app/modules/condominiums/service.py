@@ -13,6 +13,11 @@ class CondominiumService:
     def __init__(self, repo: CondominiumRepository) -> None:
         self._repo = repo
 
+    async def list_featured(self, limit: int, city: str | None):
+        items = await self._repo.list_featured(limit=limit, city=city)
+        total = await self._repo.count_featured(city=city)
+        return items, total
+
     async def list_condominiums(self, offset: int, limit: int):
         total = await self._repo.count()
         items = await self._repo.list_all(offset=offset, limit=limit)

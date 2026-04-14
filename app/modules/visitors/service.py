@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import secrets
+import string
+from datetime import date, datetime
 from uuid import UUID
 
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.visitor import VisitorLog
 from app.modules.visitors.repository import VisitorRepository
-from app.schemas.visitor import ResidentVisitorCreate, VisitorLogCreate, VisitorLogOut
+from app.schemas.visitor import (
+    PublicVisitorPreregister,
+    PublicVisitorPreregisterOut,
+    ResidentVisitorCreate,
+    VisitorLogCreate,
+    VisitorLogOut,
+)
 
 
 class VisitorService:
@@ -57,6 +65,51 @@ class VisitorService:
         )
         visitor = await self._repo.create(visitor)
         return self._out(visitor)
+
+    @staticmethod
+    def _generate_reference_code() -> str:
+        today = date.today().strftime("%Y%m%d")
+        suffix = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(4))
+        return f"VIS-{today}-{suffix}"
+
+    async def public_preregister(self, body: PublicVisitorPreregister) -> dict:
+        """Public visitor pre-registration (no auth required)."""
+        condo = await self._repo.get_condominium(body.condominium_id)
+        if not condo:
+            raise NotFoundError("Condominio no encontrado o inactivo")
+
+        prop = await self._repo.get_property_by_number(body.condominium_id, body.property_number)
+        if not prop:
+            raise NotFoundError(
+                f"Propiedad '{body.property_number}' no encontrada en este condominio"
+            )
+
+        notes_parts = []
+        if body.vehicle_type:
+            notes_parts.append(f"Tipo vehículo: {body.vehicle_type}")
+        if body.reason:
+            notes_parts.append(f"Motivo: {body.reason}")
+
+        visitor = VisitorLog(
+            condominium_id=body.condominium_id,
+            property_id=prop.id,
+            visitor_name=body.visitor_name,
+            document_type_id=body.document_type_id,
+            document_number=body.document_number,
+            phone=body.phone,
+            reason=body.reason,
+            expected_date=body.expected_date,
+            expected_time=body.expected_time,
+            vehicle_plate=body.vehicle_plate,
+            reference_code=self._generate_reference_code(),
+            notes="; ".join(notes_parts) if notes_parts else None,
+            is_guest=True,
+        )
+        visitor = await self._repo.create(visitor)
+        return PublicVisitorPreregisterOut(
+            visitor_id=visitor.id,
+            reference_code=visitor.reference_code,
+        ).model_dump()
 
     async def register_entry(self, body: VisitorLogCreate, cid: UUID, user_id: UUID):
         """Admin/guard registers a visitor with immediate entry."""
@@ -132,6 +185,11 @@ class VisitorService:
             authorized_by=v.authorized_by,
             authorized_by_name=v.authorized_user.full_name if v.authorized_user else None,
             registered_by=v.registered_by,
+            phone=v.phone,
+            reason=v.reason,
+            expected_date=v.expected_date,
+            expected_time=v.expected_time,
+            reference_code=v.reference_code,
             entry_time=v.entry_time,
             exit_time=v.exit_time,
             notes=v.notes,

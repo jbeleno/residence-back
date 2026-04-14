@@ -36,6 +36,11 @@ def _mock_visitor(vid=None, has_exit=False):
     v.authorized_by = _uid()
     v.authorized_user = MagicMock(full_name="Admin User")
     v.registered_by = _uid()
+    v.phone = None
+    v.reason = None
+    v.expected_date = None
+    v.expected_time = None
+    v.reference_code = None
     v.entry_time = datetime(2025, 3, 1, 10, 0, tzinfo=timezone.utc)
     v.exit_time = datetime(2025, 3, 1, 15, 0, tzinfo=timezone.utc) if has_exit else None
     v.notes = None
@@ -74,7 +79,7 @@ class TestListVisitors:
         svc = VisitorService(repo)
         result = await svc.list_active(cid)
         assert len(result) == 1
-        repo.list_visitors.assert_awaited_once_with(cid, active_only=True)
+        repo.list_visitors.assert_awaited_once_with(cid, active_only=True, property_id=None)
 
     @pytest.mark.asyncio
     async def test_list_empty(self):
