@@ -68,6 +68,13 @@ class AmenityService:
         if not amenity.is_active:
             raise BadRequestError("Amenidad no disponible")
 
+        prop = await self._repo.get_property(body.property_id, cid)
+        if not prop:
+            raise NotFoundError("Propiedad no encontrada en este condominio")
+
+        if body.end_time <= body.start_time:
+            raise BadRequestError("end_time debe ser mayor que start_time")
+
         overlap = await self._repo.check_overlap(body.amenity_id, body.start_time, body.end_time)
         if overlap:
             raise ConflictError("Horario no disponible, hay cruce con otra reserva")

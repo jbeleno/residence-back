@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.amenity import Amenity, AmenityBooking
 from app.models.catalog import BookingStatus
+from app.models.core import Property
 
 
 class AmenityRepository:
@@ -98,6 +99,17 @@ class AmenityRepository:
                 AmenityBooking.booking_status_id.in_([1, 2]),
                 AmenityBooking.start_time < end,
                 AmenityBooking.end_time > start,
+            )
+        )
+        return result.scalars().first()
+
+    async def get_property(self, property_id: UUID, cid: UUID) -> Property | None:
+        """Verify the property exists and belongs to this condominium."""
+        result = await self._db.execute(
+            select(Property).where(
+                Property.id == property_id,
+                Property.condominium_id == cid,
+                Property.deleted_at.is_(None),
             )
         )
         return result.scalars().first()
