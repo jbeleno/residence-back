@@ -58,6 +58,16 @@ class UserRepository:
     async def create_ucr(self, ucr: UserCondominiumRole) -> None:
         self._db.add(ucr)
 
+    async def get_ucr(self, user_id: UUID, cid: UUID) -> UserCondominiumRole | None:
+        """Check if user already has a role in the given condominium."""
+        result = await self._db.execute(
+            select(UserCondominiumRole).where(
+                UserCondominiumRole.user_id == user_id,
+                UserCondominiumRole.condominium_id == cid,
+            )
+        )
+        return result.scalars().first()
+
     async def update(self, user: User, data: dict) -> User:
         for key, val in data.items():
             setattr(user, key, val)

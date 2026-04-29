@@ -528,7 +528,8 @@ class TestUserEndpoints:
     @pytest.mark.asyncio
     async def test_create_user(self):
         svc = AsyncMock()
-        svc.create_user.return_value = self._user_out()
+        # create_user now returns (user, was_existing)
+        svc.create_user.return_value = (self._user_out(), False)
 
         app = _create_test_app(user=_fake_user(), cid=_cid(), role="admin", user_svc=svc)
         transport = ASGITransport(app=app)
@@ -537,6 +538,9 @@ class TestUserEndpoints:
                 "full_name": "New", "email": "n@n.com", "password": "secret",
             })
         assert r.status_code == 201
+        body = r.json()
+        assert body["data"]["was_existing"] is False
+        assert "user" in body["data"]
 
 
 # ══════════════════════════════════════════════════════════════════════════

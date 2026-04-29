@@ -13,8 +13,9 @@ from app.modules.auth.repository import AuthRepository
 from app.modules.auth.service import AuthService
 from app.schemas.auth import (
     ChangePasswordRequest,
+    ConfirmEmailChange,
     LoginRequest,
-    RegisterRequest,
+    RequestEmailChange,
     RequestPasswordResetRequest,
     RequestPinRequest,
     ResetPasswordRequest,
@@ -28,17 +29,6 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 def _service(db: AsyncSession = Depends(get_db)) -> AuthService:
     return AuthService(AuthRepository(db))
-
-
-# ══════════════════════════════════════════════════════════════════════════
-#  Registration
-# ══════════════════════════════════════════════════════════════════════════
-
-@router.post("/register", status_code=201)
-async def register(body: RegisterRequest, svc: AuthService = Depends(_service)):
-    """Register a new user account."""
-    data = await svc.register(body)
-    return success(data)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -131,3 +121,25 @@ async def get_me(
 ):
     data = await svc.get_me(current_user, token)
     return success(data.model_dump())
+
+
+@router.post("/me/email/request")
+async def request_email_change(
+    body: RequestEmailChange,
+    current_user=Depends(get_current_user),
+    svc: AuthService = Depends(_service),
+):
+    """Request an email change PIN sent to the new email."""
+    data = await svc.request_email_change(current_user, body)
+    return success(data)
+
+
+@router.post("/me/email/confirm")
+async def confirm_email_change(
+    body: ConfirmEmailChange,
+    current_user=Depends(get_current_user),
+    svc: AuthService = Depends(_service),
+):
+    """Confirm email change with PIN."""
+    data = await svc.confirm_email_change(current_user, body)
+    return success(data)

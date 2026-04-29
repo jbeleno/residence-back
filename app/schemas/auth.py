@@ -79,9 +79,9 @@ class VerifyEmailRequest(BaseModel):
     pin: str
 
 
-class RegisterRequest(BaseModel):
-    full_name: str
-    email: EmailStr
-    password: str
-    phone: str | None = None
-    condominium_id: UUID | None = None
+class RequestEmailChange(BaseModel):
+    new_email: EmailStr
+
+
+class ConfirmEmailChange(BaseModel):
+    pin: str

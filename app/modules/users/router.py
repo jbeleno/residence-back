@@ -10,14 +10,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import (
     get_current_condominium_id,
+    get_current_role,
     get_current_user,
     require_admin,
     require_authenticated,
 )
+from app.core.exceptions import ForbiddenError
 from app.core.responses import success
 from app.modules.users.repository import UserRepository
 from app.modules.users.service import UserService
-from app.schemas.user import UserCreate, UserDeviceCreate, UserDeviceOut, UserOut, UserUpdate
+from app.schemas.user import (
+    UserCreate,
+    UserCreateResponse,
+    UserDeviceCreate,
+    UserDeviceOut,
+    UserOut,
+    UserUpdate,
+)
 
 router = APIRouter(prefix="/users", tags=["Usuarios"])
 
@@ -49,7 +58,30 @@ async def create_user(
     cid: UUID = Depends(get_current_condominium_id),
     svc: UserService = Depends(_service),
 ):
-    user = await svc.create_user(body, cid)
+    """Create a new user, or auto-link an existing one to this condominium."""
+    user, was_existing = await svc.create_user(body, cid)
+    message = (
+        "Usuario existente vinculado al condominio."
+        if was_existing
+        else "Usuario creado exitosamente."
+    )
+    return success(
+        UserCreateResponse(
+            user=UserOut.model_validate(user),
+            was_existing=was_existing,
+            message=message,
+        ).model_dump()
+    )
+
+
+@router.patch("/me")
+async def update_my_profile(
+    body: UserUpdate,
+    current_user=Depends(get_current_user),
+    svc: UserService = Depends(_service),
+):
+    """Self-service: a user updates their own profile fields."""
+    user = await svc.update_user(current_user.id, body)
     return success(UserOut.model_validate(user).model_dump())
 
 
@@ -57,8 +89,20 @@ async def create_user(
 async def update_user(
     user_id: UUID,
     body: UserUpdate,
+    current_user=Depends(get_current_user),
+    role: str = Depends(get_current_role),
     svc: UserService = Depends(_service),
 ):
+    """Update another user's profile.
+
+    Only the user themselves or super_admin can edit a user's personal data.
+    Admins of a condo cannot edit other users' personal info to avoid
+    cross-condo conflicts.
+    """
+    if user_id != current_user.id and role != "super_admin":
+        raise ForbiddenError(
+            "Solo el propio usuario o super_admin pueden editar este perfil"
+        )
     user = await svc.update_user(user_id, body)
     return success(UserOut.model_validate(user).model_dump())
 

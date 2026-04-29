@@ -74,12 +74,20 @@ class AuthRepository:
             .values(used=True)
         )
 
-    async def create_pin(self, user_id: UUID, pin_code: str, pin_type: str, expires_at: datetime) -> EmailPin:
+    async def create_pin(
+        self,
+        user_id: UUID,
+        pin_code: str,
+        pin_type: str,
+        expires_at: datetime,
+        payload: str | None = None,
+    ) -> EmailPin:
         pin = EmailPin(
             user_id=user_id,
             pin_code=pin_code,
             pin_type=pin_type,
             expires_at=expires_at,
+            payload=payload,
         )
         self._db.add(pin)
         await self._db.flush()

@@ -128,24 +128,57 @@ class TestCreateUser:
         body.email = "x@x.com"
 
         svc = UserService(repo)
-        result = await svc.create_user(body, cid)
+        user, was_existing = await svc.create_user(body, cid)
 
-        assert result == created
+        assert user == created
+        assert was_existing is False
         repo.create_user.assert_awaited_once()
         repo.create_ucr.assert_awaited_once()
         repo.commit_and_refresh.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_duplicate_email(self):
+    async def test_existing_email_auto_links_to_new_condo(self):
+        """If email exists and user has no role in target condo, auto-link them."""
+        cid = _uid()
+        existing = _mock_user(email="dup@dup.com")
         repo = _repo()
-        repo.get_by_email.return_value = _mock_user()
+        repo.get_by_email.return_value = existing
+        repo.get_ucr.return_value = None  # No existe UCR en este condo
 
         body = MagicMock()
+        body.model_dump.return_value = {"full_name": "X", "email": "dup@dup.com"}
+        body.password = "secret"
+        body.role_id = 4
+        body.condominium_id = None
         body.email = "dup@dup.com"
 
         svc = UserService(repo)
-        with pytest.raises(ConflictError, match="email ya está registrado"):
-            await svc.create_user(body, _uid())
+        user, was_existing = await svc.create_user(body, cid)
+
+        assert user == existing
+        assert was_existing is True
+        repo.create_user.assert_not_awaited()  # No crea otro user
+        repo.create_ucr.assert_awaited_once()  # Solo crea UCR
+
+    @pytest.mark.asyncio
+    async def test_existing_email_same_condo_fails(self):
+        """If user already has a role in this condo, fail."""
+        cid = _uid()
+        existing = _mock_user()
+        repo = _repo()
+        repo.get_by_email.return_value = existing
+        repo.get_ucr.return_value = MagicMock()  # Ya tiene UCR aquí
+
+        body = MagicMock()
+        body.model_dump.return_value = {"full_name": "X", "email": "dup@dup.com"}
+        body.password = "secret"
+        body.role_id = 4
+        body.condominium_id = None
+        body.email = "dup@dup.com"
+
+        svc = UserService(repo)
+        with pytest.raises(ConflictError, match="ya está asignado"):
+            await svc.create_user(body, cid)
 
     @pytest.mark.asyncio
     async def test_default_role(self):
@@ -164,8 +197,9 @@ class TestCreateUser:
 
         svc = UserService(repo)
         cid = _uid()
-        result = await svc.create_user(body, cid)
-        assert result == created
+        user, was_existing = await svc.create_user(body, cid)
+        assert user == created
+        assert was_existing is False
         repo.create_ucr.assert_awaited_once()
 
 

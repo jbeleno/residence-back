@@ -15,9 +15,10 @@ from app.modules.auth.repository import AuthRepository
 from app.schemas.auth import (
     ChangePasswordRequest,
     CondominiumRoleOut,
+    ConfirmEmailChange,
     LoginDataOut,
     LoginRequest,
-    RegisterRequest,
+    RequestEmailChange,
     RequestPasswordResetRequest,
     RequestPinRequest,
     ResetPasswordRequest,
@@ -70,36 +71,6 @@ class AuthService:
 
         await self._repo.mark_pin_used(pin)
         return user
-
-    # ══════════════════════════════════════════════════════════════════════
-    #  Registration
-    # ══════════════════════════════════════════════════════════════════════
-
-    async def register(self, body: RegisterRequest) -> dict:
-        """Register a new user. Optionally assign to a condominium."""
-        existing = await self._repo.get_user_by_email(body.email)
-        if existing is not None:
-            raise ConflictError("Ya existe una cuenta con ese correo electrónico")
-
-        user = await self._repo.create_user(
-            full_name=body.full_name,
-            email=body.email,
-            password=body.password,
-            phone=body.phone,
-        )
-
-        if body.condominium_id:
-            await self._repo.assign_condominium_role(
-                user.id, body.condominium_id, role_id=4,  # residente
-            )
-
-        await self._repo.save()
-
-        return {
-            "user_id": str(user.id),
-            "email": user.email,
-            "message": "Cuenta creada exitosamente. Puede iniciar sesión.",
-        }
 
     # ══════════════════════════════════════════════════════════════════════
     #  FLOW 1 – Login with PIN (2-step)
@@ -304,3 +275,48 @@ class AuthService:
             properties=properties,
             access_token=token,
         )
+
+    # ══════════════════════════════════════════════════════════════════════
+    #  Email change (self-service with PIN)
+    # ══════════════════════════════════════════════════════════════════════
+
+    async def request_email_change(self, user, body: RequestEmailChange) -> dict:
+        """Send a PIN to the new email address."""
+        existing = await self._repo.get_user_by_email(body.new_email)
+        if existing is not None and existing.id != user.id:
+            raise ConflictError("Ese correo ya está registrado por otro usuario")
+        if existing is not None and existing.id == user.id:
+            raise BadRequestError("Ese ya es tu correo actual")
+
+        await self._repo.invalidate_existing_pins(user.id, "change_email")
+
+        pin = generate_pin()
+        expires = datetime.utcnow() + timedelta(minutes=settings.PIN_EXPIRE_MINUTES)
+        await self._repo.create_pin(
+            user.id, pin, "change_email", expires, payload=body.new_email,
+        )
+        await self._repo.save()
+
+        if settings.DEBUG:
+            logger.warning("🔑 [DEV] PIN change_email for %s -> %s: %s",
+                           user.email, body.new_email, pin)
+        else:
+            send_pin_email(body.new_email, pin, "change_email", user.full_name)
+
+        return {
+            "message": f"Código enviado a {body.new_email}. Expira en {settings.PIN_EXPIRE_MINUTES} minutos.",
+        }
+
+    async def confirm_email_change(self, user, body: ConfirmEmailChange) -> dict:
+        """Verify PIN and update user email."""
+        pin = await self._repo.get_valid_pin(user.id, body.pin, "change_email")
+        if pin is None:
+            raise BadRequestError("Código inválido o expirado")
+        if not pin.payload:
+            raise BadRequestError("Solicitud de cambio inválida")
+
+        user.email = pin.payload
+        user.email_verified = True
+        await self._repo.mark_pin_used(pin)
+        await self._repo.save()
+        return {"message": "Correo actualizado exitosamente."}

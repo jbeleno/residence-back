@@ -24,23 +24,40 @@ class UserService:
             raise NotFoundError("Usuario no encontrado")
         return user
 
-    async def create_user(self, body: UserCreate, cid: UUID):
-        # Duplicate check
+    async def create_user(self, body: UserCreate, cid: UUID) -> tuple:
+        """Create a new user OR auto-link an existing one to this condominium.
+
+        Returns (user, was_existing).
+        - If email exists and user has no role in target condo → auto-link.
+        - If email exists and user already has role in target condo → ConflictError.
+        - Otherwise create new user.
+        """
+        target_cid = body.condominium_id or cid
+        role_id = body.role_id or 4  # default: residente
+
         existing = await self._repo.get_by_email(body.email)
         if existing:
-            raise ConflictError("El email ya está registrado")
+            existing_ucr = await self._repo.get_ucr(existing.id, target_cid)
+            if existing_ucr:
+                raise ConflictError(
+                    "Este usuario ya está asignado a este condominio"
+                )
+            # Auto-link: only create the UCR, do not touch personal data or password
+            ucr = UserCondominiumRole(
+                user_id=existing.id, condominium_id=target_cid, role_id=role_id,
+            )
+            await self._repo.create_ucr(ucr)
+            await self._repo.commit_and_refresh(existing)
+            return existing, True
 
+        # Brand-new user
         user_data = body.model_dump(exclude={"password", "role_id", "condominium_id"})
         user = User(**user_data, password_hash=hash_password(body.password))
         user = await self._repo.create_user(user)
-
-        # Assign role
-        role_id = body.role_id or 4  # default: residente
-        target_cid = body.condominium_id or cid
         ucr = UserCondominiumRole(user_id=user.id, condominium_id=target_cid, role_id=role_id)
         await self._repo.create_ucr(ucr)
         await self._repo.commit_and_refresh(user)
-        return user
+        return user, False
 
     async def update_user(self, user_id: UUID, body: UserUpdate):
         user = await self._repo.get_by_id(user_id)

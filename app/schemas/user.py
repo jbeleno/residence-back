@@ -60,6 +60,12 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UserCreateResponse(BaseModel):
+    user: UserOut
+    was_existing: bool
+    message: str
+
+
 class UserDeviceCreate(BaseModel):
     device_token: str
     device_type: str

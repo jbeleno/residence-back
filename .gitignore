@@ -38,3 +38,6 @@ build/
 
 # ── Docs (local) ─────────────────────────────────────
 ENDPOINTS.md
+
+# ── Local dev scripts ────────────────────────────────
+seed_massive.py
