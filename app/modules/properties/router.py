@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import (
     get_current_condominium_id,
+    get_current_role,
     require_admin,
     require_authenticated,
 )
@@ -20,6 +21,7 @@ from app.schemas.property import (
     PropertyCreate,
     PropertyUpdate,
     UserPropertyCreate,
+    UserPropertyTransfer,
     UserPropertyUpdate,
 )
 
@@ -100,3 +102,19 @@ async def update_resident_assignment(
     svc: PropertyService = Depends(_service),
 ):
     return success(await svc.update_assignment(assignment_id, body))
+
+
+@router.post("/residents/{assignment_id}/transfer", dependencies=[Depends(require_admin)])
+async def transfer_resident(
+    assignment_id: int,
+    body: UserPropertyTransfer,
+    cid: UUID = Depends(get_current_condominium_id),
+    role: str = Depends(get_current_role),
+    svc: PropertyService = Depends(_service),
+):
+    """Transfer a resident to another property.
+
+    - Same condominium: admin or super_admin
+    - Different condominium: super_admin only
+    """
+    return success(await svc.transfer_resident(assignment_id, body, cid, role))

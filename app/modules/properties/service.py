@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import date
 from uuid import UUID
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.modules.properties.repository import PropertyRepository
 from app.schemas.property import (
     PropertyCreate,
@@ -12,6 +13,7 @@ from app.schemas.property import (
     PropertyUpdate,
     UserPropertyCreate,
     UserPropertyOut,
+    UserPropertyTransfer,
     UserPropertyUpdate,
 )
 
@@ -65,6 +67,56 @@ class PropertyService:
             raise NotFoundError("Asignación no encontrada")
         up = await self._repo.update_assignment(up, body.model_dump(exclude_unset=True))
         return self._up_out(up)
+
+    async def transfer_resident(
+        self, aid: int, body: UserPropertyTransfer, current_cid: UUID, current_role: str,
+    ):
+        """Transfer a resident from current property to a new one.
+
+        Permissions:
+        - Same condominium: admin or super_admin
+        - Different condominium: super_admin only
+        """
+        current = await self._repo.get_assignment_by_id(aid)
+        if not current:
+            raise NotFoundError("Asignación no encontrada")
+
+        old_prop = await self._repo.get_property_any_condo(current.property_id)
+        if not old_prop:
+            raise NotFoundError("Propiedad actual no encontrada")
+
+        new_prop = await self._repo.get_property_any_condo(body.new_property_id)
+        if not new_prop:
+            raise NotFoundError("Propiedad destino no encontrada")
+
+        # Same property guard
+        if old_prop.id == new_prop.id:
+            raise ForbiddenError("La propiedad destino debe ser distinta a la actual")
+
+        # Permission rules
+        cross_condo = old_prop.condominium_id != new_prop.condominium_id
+        if cross_condo and current_role != "super_admin":
+            raise ForbiddenError(
+                "Solo super_admin puede transferir residentes entre condominios"
+            )
+        if not cross_condo and old_prop.condominium_id != current_cid and current_role != "super_admin":
+            raise ForbiddenError("No puedes operar sobre este condominio")
+
+        today = body.start_date or date.today()
+
+        # Deactivate current assignment
+        await self._repo.update_assignment(current, {"is_active": False, "end_date": today})
+
+        # Create new assignment
+        new_data = {
+            "user_id": current.user_id,
+            "property_id": new_prop.id,
+            "relation_type_id": body.relation_type_id or current.relation_type_id,
+            "start_date": today,
+            "is_active": True,
+        }
+        new_up = await self._repo.create_assignment(new_data)
+        return self._up_out(new_up)
 
     # ── Mappers ───────────────────────────────────────────────────────────
 

@@ -60,6 +60,12 @@ class UserPropertyUpdate(BaseModel):
     end_date: date | None = None
 
 
+class UserPropertyTransfer(BaseModel):
+    new_property_id: UUID
+    relation_type_id: int | None = None
+    start_date: date | None = None
+
+
 class UserPropertyOut(BaseModel):
     id: int
     user_id: UUID

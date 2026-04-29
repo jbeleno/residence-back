@@ -105,3 +105,12 @@ class PropertyRepository:
         await self._db.commit()
         await self._db.refresh(up)
         return up
+
+    async def get_property_any_condo(self, property_id: UUID) -> Property | None:
+        """Fetch a property regardless of condominium (for cross-condo transfers)."""
+        result = await self._db.execute(
+            select(Property)
+            .options(selectinload(Property.property_type))
+            .where(Property.id == property_id, Property.deleted_at.is_(None))
+        )
+        return result.scalars().first()
