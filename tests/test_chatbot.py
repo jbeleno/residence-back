@@ -45,9 +45,20 @@ class TestChunkText:
 # ── Mock helpers ──────────────────────────────────────────────────────────
 
 
+class _AsyncCM:
+    """Trivial async context manager for mocking savepoints."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 def _mock_repo() -> AsyncMock:
     repo = AsyncMock()
     repo.save = AsyncMock()
+    repo.savepoint = MagicMock(return_value=_AsyncCM())
     return repo
 
 
@@ -109,7 +120,12 @@ class TestDocumentUpload:
 
         svc = ChatbotService(repo)
         cid, uid = uuid.uuid4(), uuid.uuid4()
-        result = await svc.upload_document(cid, uid, "Test Doc", "Some content here")
+        # Content needs to be at least 20 printable chars to pass the
+        # binary-upload guard.
+        result = await svc.upload_document(
+            cid, uid, "Test Doc",
+            "Some content here for the test document about pets.",
+        )
 
         assert result["document_id"] == 1
         assert result["chunks_created"] >= 1

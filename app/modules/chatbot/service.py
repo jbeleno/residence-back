@@ -61,9 +61,25 @@ class ChatbotService:
         if not content.strip():
             raise BadRequestError("El contenido del documento está vacío")
 
+        # Drop control / non-printable bytes left over from binary uploads
+        # (PDFs, etc. read with errors="ignore"). If the result has too few
+        # printable chars, treat as a non-text upload and reject up front.
+        cleaned = "".join(
+            ch for ch in content if ch.isprintable() or ch in "\n\r\t "
+        )
+        printable_ratio = len(cleaned) / max(len(content), 1)
+        if printable_ratio < 0.3 or len(cleaned.strip()) < 20:
+            raise BadRequestError(
+                "No se pudo extraer texto legible del archivo. "
+                "Sólo se aceptan archivos de texto plano (.txt, .md). "
+                "Para PDF/Word, conviértelos a texto antes de subirlos."
+            )
+
         doc = await self._repo.create_document(cid, title, source_type, filename, user_id)
-        chunks = _chunk_text(content)
+        chunks = _chunk_text(cleaned)
         if not chunks:
+            await self._repo.delete_document(doc.id, cid)
+            await self._repo.save()
             raise BadRequestError("No se pudo extraer texto del documento")
 
         # Limit chunk count to avoid Gemini rate limits / 503s on huge files.
@@ -77,15 +93,20 @@ class ChatbotService:
 
         created = 0
         failed = 0
+        # Savepoint per chunk: if one fails (Gemini error, bad SQL, etc.),
+        # the outer transaction stays alive so the next chunks can still
+        # be inserted.
         for i, chunk in enumerate(chunks):
             try:
-                embedding = await get_embedding(chunk)
-                await self._repo.create_chunk(doc.id, i, chunk, embedding)
+                async with self._repo.savepoint():
+                    embedding = await get_embedding(chunk)
+                    await self._repo.create_chunk(doc.id, i, chunk, embedding)
                 created += 1
             except Exception:
                 failed += 1
                 logger.exception(
-                    "Embedding failed for chunk %d of doc %s", i, doc.id,
+                    "Chunk %d of doc %s failed; rolled back savepoint",
+                    i, doc.id,
                 )
 
         if created == 0:
@@ -93,7 +114,8 @@ class ChatbotService:
             await self._repo.delete_document(doc.id, cid)
             await self._repo.save()
             raise BadRequestError(
-                "No se pudo generar embeddings (servicio IA no disponible). Reintenta más tarde."
+                "No se pudo generar embeddings (servicio IA no disponible o contenido inválido). "
+                "Reintenta más tarde."
             )
 
         await self._repo.save()

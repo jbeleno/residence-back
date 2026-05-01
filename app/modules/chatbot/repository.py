@@ -204,3 +204,11 @@ class ChatbotRepository:
 
     async def save(self) -> None:
         await self._db.commit()
+
+    def savepoint(self):
+        """Return a SAVEPOINT context manager scoped to the current session.
+
+        Used to isolate failures: if a per-chunk insert raises, only the
+        savepoint is rolled back and the outer transaction stays usable.
+        """
+        return self._db.begin_nested()
