@@ -213,7 +213,40 @@ class TestPasswordReset:
         body = RequestPasswordResetRequest(email="test@x.com")
         result = await svc.request_password_reset(body)
 
-        assert "Código enviado" in result["message"]
+        # silent_on_missing returns a generic message regardless of email existence
+        assert "recibirás un código" in result["message"]
+        mock_send.assert_called_once()
+
+    @patch("app.modules.auth.service.send_pin_email")
+    @pytest.mark.asyncio
+    async def test_request_reset_unknown_email_silent(self, mock_send):
+        """forgot-password should not reveal if the email exists."""
+        repo = _mock_repo()
+        repo.get_user_by_email = AsyncMock(return_value=None)
+
+        svc = AuthService(repo)
+        body = RequestPasswordResetRequest(email="nope@x.com")
+        result = await svc.request_password_reset(body)
+
+        assert "recibirás un código" in result["message"]
+        mock_send.assert_not_called()
+
+    @patch(
+        "app.modules.auth.service.send_pin_email",
+        side_effect=Exception("SMTP down"),
+    )
+    @pytest.mark.asyncio
+    async def test_request_reset_smtp_failure_doesnt_500(self, mock_send):
+        """If SMTP fails, the endpoint must still return 200 (PIN is in DB)."""
+        user = _mock_user()
+        repo = _mock_repo()
+        repo.get_user_by_email = AsyncMock(return_value=user)
+
+        svc = AuthService(repo)
+        body = RequestPasswordResetRequest(email="test@x.com")
+        result = await svc.request_password_reset(body)
+
+        assert "recibirás un código" in result["message"]
 
     @pytest.mark.asyncio
     async def test_reset_password_success(self):

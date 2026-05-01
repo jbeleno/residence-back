@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from uuid import UUID
 
 from app.core.ai import chat_completion, get_embedding
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.modules.chatbot.repository import ChatbotRepository
+
+logger = logging.getLogger(__name__)
 
 # ── Text chunking ─────────────────────────────────────────────────────────
 
@@ -60,17 +63,49 @@ class ChatbotService:
 
         doc = await self._repo.create_document(cid, title, source_type, filename, user_id)
         chunks = _chunk_text(content)
+        if not chunks:
+            raise BadRequestError("No se pudo extraer texto del documento")
 
+        # Limit chunk count to avoid Gemini rate limits / 503s on huge files.
+        MAX_CHUNKS = 200
+        if len(chunks) > MAX_CHUNKS:
+            logger.warning(
+                "Document %s has %d chunks, truncating to %d",
+                doc.id, len(chunks), MAX_CHUNKS,
+            )
+            chunks = chunks[:MAX_CHUNKS]
+
+        created = 0
+        failed = 0
         for i, chunk in enumerate(chunks):
-            embedding = await get_embedding(chunk)
-            await self._repo.create_chunk(doc.id, i, chunk, embedding)
+            try:
+                embedding = await get_embedding(chunk)
+                await self._repo.create_chunk(doc.id, i, chunk, embedding)
+                created += 1
+            except Exception:
+                failed += 1
+                logger.exception(
+                    "Embedding failed for chunk %d of doc %s", i, doc.id,
+                )
+
+        if created == 0:
+            # Roll back the document so we don't leave orphan rows.
+            await self._repo.delete_document(doc.id, cid)
+            await self._repo.save()
+            raise BadRequestError(
+                "No se pudo generar embeddings (servicio IA no disponible). Reintenta más tarde."
+            )
 
         await self._repo.save()
+        msg = f"Documento '{title}' procesado con {created} fragmentos."
+        if failed:
+            msg += f" {failed} fragmentos fallaron."
         return {
             "document_id": doc.id,
             "title": title,
-            "chunks_created": len(chunks),
-            "message": f"Documento '{title}' procesado con {len(chunks)} fragmentos.",
+            "chunks_created": created,
+            "chunks_failed": failed,
+            "message": msg,
         }
 
     async def list_documents(self, cid: UUID) -> list[dict]:

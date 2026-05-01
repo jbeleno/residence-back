@@ -37,12 +37,29 @@ class AuthService:
 
     # ── helpers ────────────────────────────────────────────────────────────
 
-    async def _send_pin(self, email: str, pin_type: str) -> dict:
+    async def _send_pin(
+        self, email: str, pin_type: str, *, silent_on_missing: bool = False,
+    ) -> dict:
+        """Generate a PIN for the user and email it.
+
+        If silent_on_missing=True and the email is not registered, returns the
+        same generic message without revealing the user's existence (used for
+        password reset to avoid email enumeration).
+
+        SMTP failures are logged but never raised — the PIN is stored in the
+        DB regardless and surfaced via logs in DEBUG.
+        """
+        generic_msg = (
+            f"Si el correo está registrado, recibirás un código. "
+            f"Expira en {settings.PIN_EXPIRE_MINUTES} minutos."
+        )
+
         user = await self._repo.get_user_by_email(email)
         if user is None:
+            if silent_on_missing:
+                return {"message": generic_msg}
             raise UnauthorizedError("Correo no registrado")
 
-        # Invalidate previous PINs of this type
         await self._repo.invalidate_existing_pins(user.id, pin_type)
 
         pin = generate_pin()
@@ -50,12 +67,19 @@ class AuthService:
         await self._repo.create_pin(user.id, pin, pin_type, expires)
         await self._repo.save()
 
-        # Send email (sync SMTP – fast enough for transactional emails)
+        # Always log the PIN in DEBUG so devs can recover when SMTP isn't set up.
         if settings.DEBUG:
             logger.warning("🔑 [DEV] PIN for %s (%s): %s", email, pin_type, pin)
-        else:
-            send_pin_email(user.email, pin, pin_type, user.full_name)
 
+        # Try to send via SMTP. Don't fail the request if the mail server is
+        # down — the PIN is already persisted; surface the failure in logs.
+        try:
+            send_pin_email(user.email, pin, pin_type, user.full_name)
+        except Exception:
+            logger.exception("SMTP failed to send %s PIN to %s", pin_type, email)
+
+        if silent_on_missing:
+            return {"message": generic_msg}
         return {
             "message": f"Código enviado a {email}. Expira en {settings.PIN_EXPIRE_MINUTES} minutos.",
         }
@@ -195,7 +219,8 @@ class AuthService:
     # ══════════════════════════════════════════════════════════════════════
 
     async def request_password_reset(self, body: RequestPasswordResetRequest) -> dict:
-        return await self._send_pin(body.email, "reset_password")
+        # silent_on_missing avoids leaking which emails are registered.
+        return await self._send_pin(body.email, "reset_password", silent_on_missing=True)
 
     async def reset_password(self, body: ResetPasswordRequest) -> dict:
         user = await self._verify_pin(body.email, body.pin, "reset_password")
@@ -300,8 +325,10 @@ class AuthService:
         if settings.DEBUG:
             logger.warning("🔑 [DEV] PIN change_email for %s -> %s: %s",
                            user.email, body.new_email, pin)
-        else:
+        try:
             send_pin_email(body.new_email, pin, "change_email", user.full_name)
+        except Exception:
+            logger.exception("SMTP failed to send change_email PIN to %s", body.new_email)
 
         return {
             "message": f"Código enviado a {body.new_email}. Expira en {settings.PIN_EXPIRE_MINUTES} minutos.",
