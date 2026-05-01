@@ -194,29 +194,119 @@ class ChatbotService:
         }
 
     async def _build_structured_context(self, cid: UUID) -> str:
-        """Build a compact text summary of condo data for the LLM context."""
+        """Build a compact text summary of condo data for the LLM context.
+
+        Each block is wrapped in try/except so a single failing query
+        never knocks the chat offline.
+        """
         parts = []
-        condo = await self._repo.get_condominium(cid)
-        if condo:
+
+        try:
+            condo = await self._repo.get_condominium(cid)
+            if condo:
+                parts.append(
+                    f"Condominio: {condo.name}, {condo.address}, {condo.city}. "
+                    f"Teléfono: {condo.phone or 'no registrado'}. "
+                    f"Email: {condo.email or 'no registrado'}."
+                )
+        except Exception:
+            logger.exception("ctx: condominium lookup failed")
+
+        try:
+            n_props = await self._repo.count_properties(cid)
+            n_res = await self._repo.count_residents(cid)
+            n_amen = await self._repo.count_amenities(cid)
             parts.append(
-                f"Condominio: {condo.name}, {condo.address}, {condo.city}. "
-                f"Teléfono: {condo.phone}. Email: {condo.email}."
+                f"Propiedades: {n_props}. Residentes activos: {n_res}. "
+                f"Amenidades activas: {n_amen}."
             )
+        except Exception:
+            logger.exception("ctx: counts failed")
 
-        n_props = await self._repo.count_properties(cid)
-        n_res = await self._repo.count_residents(cid)
-        n_amen = await self._repo.count_amenities(cid)
-        parts.append(f"Propiedades: {n_props}. Residentes: {n_res}. Amenidades: {n_amen}.")
+        try:
+            amenities = await self._repo.list_amenities(cid)
+            if amenities:
+                amen_lines = []
+                for a in amenities:
+                    cost = float(a.hourly_cost or 0)
+                    cost_str = (
+                        "gratis" if cost == 0 else f"${int(cost):,} COP/hora"
+                    )
+                    cap = f"capacidad {a.capacity}" if a.capacity else "sin límite"
+                    amen_lines.append(f"{a.name} ({cost_str}, {cap})")
+                parts.append("Amenidades disponibles: " + "; ".join(amen_lines) + ".")
+        except Exception:
+            logger.exception("ctx: amenities list failed")
 
-        amenities = await self._repo.list_amenities(cid)
-        if amenities:
-            amen_list = ", ".join(a.name for a in amenities)
-            parts.append(f"Amenidades disponibles: {amen_list}.")
+        try:
+            pets = await self._repo.list_pets(cid)
+            if pets:
+                species_count: dict[str, int] = {}
+                for p in pets:
+                    sp = p.pet_species.name if p.pet_species else "Otro"
+                    species_count[sp] = species_count.get(sp, 0) + 1
+                breakdown = ", ".join(f"{c} {sp}" for sp, c in species_count.items())
+                parts.append(
+                    f"Mascotas registradas: {len(pets)} en total ({breakdown})."
+                )
+            else:
+                parts.append("Mascotas registradas: 0.")
+        except Exception:
+            logger.exception("ctx: pets failed")
 
-        news = await self._repo.latest_news(cid, limit=3)
-        if news:
-            news_texts = "; ".join(f"{n.title}" for n in news)
-            parts.append(f"Últimas noticias: {news_texts}.")
+        try:
+            parking = await self._repo.list_parking_spaces(cid)
+            if parking:
+                type_count: dict[str, int] = {}
+                for ps in parking:
+                    t = ps.parking_type.name if ps.parking_type else "Sin tipo"
+                    type_count[t] = type_count.get(t, 0) + 1
+                breakdown = ", ".join(f"{c} {t}" for t, c in type_count.items())
+                parts.append(
+                    f"Parqueaderos: {len(parking)} espacios activos ({breakdown})."
+                )
+            else:
+                parts.append("Parqueaderos: 0 espacios activos.")
+        except Exception:
+            logger.exception("ctx: parking failed")
+
+        try:
+            invoices = await self._repo.list_invoices(cid)
+            if invoices:
+                total = len(invoices)
+                overdue_status = await self._repo.get_overdue_status()
+                overdue_id = overdue_status.id if overdue_status else None
+                pending = sum(1 for i in invoices if float(i.balance or 0) > 0)
+                paid = total - pending
+                overdue_count = (
+                    sum(1 for i in invoices if i.payment_status_id == overdue_id)
+                    if overdue_id else 0
+                )
+                outstanding = sum(float(i.balance or 0) for i in invoices)
+                parts.append(
+                    f"Finanzas: {total} facturas ({paid} pagadas, {pending} con saldo, "
+                    f"{overdue_count} vencidas). Saldo total pendiente: "
+                    f"${int(outstanding):,} COP."
+                )
+        except Exception:
+            logger.exception("ctx: finance failed")
+
+        try:
+            short_rent = await self._repo.list_short_rent_properties(cid)
+            if short_rent:
+                parts.append(
+                    f"Propiedades en arriendo corto: {len(short_rent)}."
+                )
+        except Exception:
+            logger.exception("ctx: short rent failed")
+
+        try:
+            news = await self._repo.latest_news(cid, limit=3)
+            if news:
+                news_texts = "; ".join(n.title for n in news)
+                parts.append(f"Últimas noticias: {news_texts}.")
+        except Exception:
+            logger.exception("ctx: news failed")
 
         return " ".join(parts)
 
