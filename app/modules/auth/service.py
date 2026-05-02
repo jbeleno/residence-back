@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.email import generate_pin, send_pin_email
 
 logger = logging.getLogger(__name__)
-from app.core.exceptions import BadRequestError, ForbiddenError, UnauthorizedError
+from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError
 from app.core.security import create_access_token, hash_password, verify_password
 from app.modules.auth.repository import AuthRepository
 from app.schemas.auth import (
@@ -97,6 +97,39 @@ class AuthService:
         await self._repo.mark_pin_used(pin)
         return user
 
+    async def _resolve_condominiums(self, user_id) -> list[CondominiumRoleOut]:
+        """Build the list of condominiums the user can enter.
+
+        A regular user only sees the condos where they have an active UCR.
+        A super_admin (any UCR with role super_admin in any condo) ALSO sees
+        every other active condominium with role="super_admin" — they don't
+        need a formal assignment per condo.
+        """
+        ucr_rows = await self._repo.get_user_condominium_roles(user_id)
+        seen_ids: set = set()
+        result: list[CondominiumRoleOut] = []
+        is_super = False
+        for _ucr, condo, role in ucr_rows:
+            seen_ids.add(condo.id)
+            if role.role_name == "super_admin":
+                is_super = True
+            result.append(CondominiumRoleOut(
+                condominium_id=condo.id,
+                condominium_name=condo.name,
+                role=role.role_name,
+            ))
+
+        if is_super:
+            for condo in await self._repo.list_condominiums():
+                if condo.id in seen_ids:
+                    continue
+                result.append(CondominiumRoleOut(
+                    condominium_id=condo.id,
+                    condominium_name=condo.name,
+                    role="super_admin",
+                ))
+        return result
+
     # ══════════════════════════════════════════════════════════════════════
     #  FLOW 1 – Login with PIN (2-step)
     # ══════════════════════════════════════════════════════════════════════
@@ -128,15 +161,7 @@ class AuthService:
         )
         await self._repo.save()
 
-        ucr_rows = await self._repo.get_user_condominium_roles(user.id)
-        condominiums = [
-            CondominiumRoleOut(
-                condominium_id=condo.id,
-                condominium_name=condo.name,
-                role=role.role_name,
-            )
-            for _ucr, condo, role in ucr_rows
-        ]
+        condominiums = await self._resolve_condominiums(user.id)
 
         prop_rows = await self._repo.get_user_properties(user.id)
         properties = [
@@ -184,15 +209,7 @@ class AuthService:
         user.last_login_at = datetime.utcnow()
         await self._repo.save()
 
-        ucr_rows = await self._repo.get_user_condominium_roles(user.id)
-        condominiums = [
-            CondominiumRoleOut(
-                condominium_id=condo.id,
-                condominium_name=condo.name,
-                role=role.role_name,
-            )
-            for _ucr, condo, role in ucr_rows
-        ]
+        condominiums = await self._resolve_condominiums(user.id)
 
         prop_rows = await self._repo.get_user_properties(user.id)
         properties = [
@@ -268,12 +285,24 @@ class AuthService:
         row = await self._repo.get_user_role_in_condominium(
             user_id, body.condominium_id
         )
-        if row is None:
-            raise ForbiddenError("No pertenece a este condominio")
-        _ucr, role = row
+
+        # Normal path: user has a UCR in this condo, use it.
+        if row is not None:
+            _ucr, role = row
+            role_name = role.role_name
+        else:
+            # Fallback: super_admin can enter any condominium without a formal UCR.
+            from uuid import UUID as _UUID
+            uid = user_id if isinstance(user_id, _UUID) else _UUID(str(user_id))
+            if not await self._repo.is_super_admin(uid):
+                raise ForbiddenError("No pertenece a este condominio")
+            condo = await self._repo.get_condominium_by_id(body.condominium_id)
+            if condo is None:
+                raise NotFoundError("Condominio no encontrado")
+            role_name = "super_admin"
 
         new_token = create_access_token(
-            {"sub": user_id, "cid": str(body.condominium_id), "role": role.role_name}
+            {"sub": str(user_id), "cid": str(body.condominium_id), "role": role_name}
         )
         return TokenResponse(access_token=new_token)
 
@@ -299,15 +328,7 @@ class AuthService:
         await self._repo.save()
 
     async def get_me(self, user, token: str) -> LoginDataOut:
-        ucr_rows = await self._repo.get_user_condominium_roles(user.id)
-        condominiums = [
-            CondominiumRoleOut(
-                condominium_id=condo.id,
-                condominium_name=condo.name,
-                role=role.role_name,
-            )
-            for _ucr, condo, role in ucr_rows
-        ]
+        condominiums = await self._resolve_condominiums(user.id)
         prop_rows = await self._repo.get_user_properties(user.id)
         properties = [
             UserPropertyOut(

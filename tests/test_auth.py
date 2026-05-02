@@ -333,13 +333,48 @@ class TestSelectCondominium:
 
     @pytest.mark.asyncio
     async def test_not_member(self):
+        """Regular user with no UCR in this condo and not super_admin → 403."""
         repo = _mock_repo()
         repo.get_user_role_in_condominium = AsyncMock(return_value=None)
+        repo.is_super_admin = AsyncMock(return_value=False)
 
         svc = AuthService(repo)
         body = SelectCondominiumRequest(condominium_id=uuid.uuid4())
 
         with pytest.raises(ForbiddenError, match="No pertenece"):
+            await svc.select_condominium(body, str(uuid.uuid4()))
+
+    @pytest.mark.asyncio
+    async def test_super_admin_without_formal_ucr(self):
+        """super_admin without a UCR in this condo can still enter."""
+        repo = _mock_repo()
+        repo.get_user_role_in_condominium = AsyncMock(return_value=None)
+        repo.is_super_admin = AsyncMock(return_value=True)
+        repo.get_condominium_by_id = AsyncMock(return_value=MagicMock(id=uuid.uuid4()))
+
+        svc = AuthService(repo)
+        body = SelectCondominiumRequest(condominium_id=uuid.uuid4())
+        result = await svc.select_condominium(body, str(uuid.uuid4()))
+
+        assert result.access_token is not None
+        # The token should carry role=super_admin
+        from app.core.security import decode_access_token
+        payload = decode_access_token(result.access_token)
+        assert payload["role"] == "super_admin"
+
+    @pytest.mark.asyncio
+    async def test_super_admin_condo_not_found(self):
+        """super_admin requesting a condo that doesn't exist → 404."""
+        from app.core.exceptions import NotFoundError
+        repo = _mock_repo()
+        repo.get_user_role_in_condominium = AsyncMock(return_value=None)
+        repo.is_super_admin = AsyncMock(return_value=True)
+        repo.get_condominium_by_id = AsyncMock(return_value=None)
+
+        svc = AuthService(repo)
+        body = SelectCondominiumRequest(condominium_id=uuid.uuid4())
+
+        with pytest.raises(NotFoundError, match="Condominio no encontrado"):
             await svc.select_condominium(body, str(uuid.uuid4()))
 
 

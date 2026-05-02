@@ -60,6 +60,34 @@ class AuthRepository:
         result = await self._db.execute(stmt)
         return result.first()  # type: ignore[return-value]
 
+    async def is_super_admin(self, user_id: UUID) -> bool:
+        """Return True if the user has a super_admin role in *any* condominium."""
+        stmt = (
+            select(UserCondominiumRole.id)
+            .join(Role, UserCondominiumRole.role_id == Role.id)
+            .where(
+                UserCondominiumRole.user_id == user_id,
+                UserCondominiumRole.is_active.is_(True),
+                Role.role_name == "super_admin",
+            )
+            .limit(1)
+        )
+        result = await self._db.execute(stmt)
+        return result.first() is not None
+
+    async def get_condominium_by_id(self, condominium_id: UUID) -> Condominium | None:
+        stmt = select(Condominium).where(
+            Condominium.id == condominium_id,
+            Condominium.deleted_at.is_(None),
+        )
+        result = await self._db.execute(stmt)
+        return result.scalars().first()
+
+    async def list_condominiums(self) -> list[Condominium]:
+        stmt = select(Condominium).where(Condominium.deleted_at.is_(None)).order_by(Condominium.name)
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
     # ── PIN operations ────────────────────────────────────────────────────
 
     async def invalidate_existing_pins(self, user_id: UUID, pin_type: str) -> None:
