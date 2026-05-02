@@ -14,6 +14,7 @@ from app.core.dependencies import (
     require_admin,
     require_authenticated,
     require_super_admin,
+    require_super_admin_user,
 )
 from app.core.responses import success
 from app.modules.properties.repository import PropertyRepository
@@ -73,7 +74,7 @@ async def update_property(
     return success(await svc.update_property(property_id, body, cid))
 
 
-@router.post("/{property_id}/restore", dependencies=[Depends(require_super_admin)])
+@router.post("/{property_id}/restore", dependencies=[Depends(require_super_admin_user)])
 async def restore_property(
     property_id: UUID,
     svc: PropertyService = Depends(_service),

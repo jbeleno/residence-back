@@ -12,6 +12,7 @@ from app.core.dependencies import (
     get_current_condominium_id,
     require_admin,
     require_super_admin,
+    require_super_admin_user,
 )
 from app.core.responses import success, success_list
 from app.modules.condominiums.repository import CondominiumRepository
@@ -94,7 +95,7 @@ async def soft_delete_condominium(
     return success({"message": "Condominio eliminado"})
 
 
-@router.post("/{condominium_id}/restore", dependencies=[Depends(require_super_admin)])
+@router.post("/{condominium_id}/restore", dependencies=[Depends(require_super_admin_user)])
 async def restore_condominium(
     condominium_id: UUID,
     svc: CondominiumService = Depends(_service),

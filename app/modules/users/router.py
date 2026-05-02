@@ -15,6 +15,7 @@ from app.core.dependencies import (
     require_admin,
     require_authenticated,
     require_super_admin,
+    require_super_admin_user,
 )
 from app.core.exceptions import ForbiddenError
 from app.core.responses import success
@@ -75,7 +76,7 @@ async def create_user(
     )
 
 
-@router.post("/{user_id}/restore", dependencies=[Depends(require_super_admin)])
+@router.post("/{user_id}/restore", dependencies=[Depends(require_super_admin_user)])
 async def restore_user(
     user_id: UUID,
     svc: UserService = Depends(_service),

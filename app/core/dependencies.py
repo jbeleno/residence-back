@@ -88,6 +88,48 @@ async def get_current_role(
     return role
 
 
+async def require_super_admin_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    """Require the caller to be a super_admin in the database.
+
+    Unlike ``require_super_admin`` (which only inspects the JWT 'role'),
+    this dep works even when the JWT has no scoped role yet — useful for
+    truly global endpoints like /restore where the caller may not have a
+    condominium selected (or the active one was just soft-deleted).
+    """
+    from sqlalchemy import select as _select
+    from app.models.core import Role, UserCondominiumRole
+
+    payload = decode_access_token(token)
+    if payload is None:
+        raise UnauthorizedError("Token inválido o expirado")
+    user_id = payload.get("sub")
+    if user_id is None:
+        raise UnauthorizedError("Token inválido")
+
+    # Trust JWT role if present and == super_admin (cheap path).
+    if payload.get("role") == "super_admin":
+        return "super_admin"
+
+    # Otherwise hit the DB: any active super_admin UCR for this user.
+    stmt = (
+        _select(UserCondominiumRole.id)
+        .join(Role, UserCondominiumRole.role_id == Role.id)
+        .where(
+            UserCondominiumRole.user_id == user_id,
+            UserCondominiumRole.is_active.is_(True),
+            Role.role_name == "super_admin",
+        )
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    if result.first() is None:
+        raise ForbiddenError("Solo super_admin puede ejecutar esta acción")
+    return "super_admin"
+
+
 # ── Role checker (reusable) ──────────────────────────────────────────────
 
 
