@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
+from app.core.exceptions import BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from app.core.security import hash_password
 from app.models.core import User, UserCondominiumRole, UserDevice
 from app.modules.users.repository import UserRepository
@@ -72,6 +72,48 @@ class UserService:
         if user.deleted_at is None:
             raise BadRequestError("El usuario ya está activo")
         return await self._repo.restore(user)
+
+    async def unlink_from_condominium(
+        self,
+        user_id: UUID,
+        condominium_id: UUID,
+        *,
+        current_role: str,
+        current_cid: UUID | None,
+    ) -> dict:
+        """Detach a user from a condominium without deleting the user.
+
+        Permissions:
+        - super_admin: can unlink anyone from any condo.
+        - admin: can only unlink users from their own active condo.
+        - others: 403.
+        """
+        if current_role != "super_admin":
+            if current_role != "admin":
+                raise ForbiddenError("Solo admin/super_admin puede desvincular usuarios")
+            if current_cid is None or current_cid != condominium_id:
+                raise ForbiddenError(
+                    "Solo puedes desvincular usuarios de tu condominio activo"
+                )
+
+        ucr = await self._repo.get_active_ucr(user_id, condominium_id)
+        if ucr is None:
+            raise NotFoundError(
+                "El usuario no tiene vínculo activo con este condominio"
+            )
+
+        await self._repo.deactivate_ucr(ucr)
+        properties_unlinked = await self._repo.deactivate_user_properties_in_condo(
+            user_id, condominium_id,
+        )
+        await self._repo.commit_and_refresh(ucr)
+
+        return {
+            "message": "Usuario desvinculado del condominio",
+            "user_id": str(user_id),
+            "condominium_id": str(condominium_id),
+            "properties_unlinked": properties_unlinked,
+        }
 
     # ── Devices ───────────────────────────────────────────────────────────
 

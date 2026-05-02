@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.core import Role, User, UserCondominiumRole, UserDevice
+from app.models.core import Property, Role, User, UserCondominiumRole, UserDevice, UserProperty
 
 
 class UserRepository:
@@ -80,6 +80,49 @@ class UserRepository:
             )
         )
         return result.scalars().first()
+
+    async def get_active_ucr(self, user_id: UUID, cid: UUID) -> UserCondominiumRole | None:
+        """Active link between a user and a condominium."""
+        result = await self._db.execute(
+            select(UserCondominiumRole).where(
+                UserCondominiumRole.user_id == user_id,
+                UserCondominiumRole.condominium_id == cid,
+                UserCondominiumRole.is_active.is_(True),
+            )
+        )
+        return result.scalars().first()
+
+    async def deactivate_ucr(self, ucr: UserCondominiumRole) -> None:
+        ucr.is_active = False
+
+    async def deactivate_user_properties_in_condo(
+        self, user_id: UUID, cid: UUID,
+    ) -> int:
+        """Deactivate every active UserProperty of the user that lives in
+        properties of the given condominium. Returns how many were touched."""
+        from datetime import date
+
+        sub = (
+            select(UserProperty.id)
+            .join(Property, UserProperty.property_id == Property.id)
+            .where(
+                UserProperty.user_id == user_id,
+                UserProperty.is_active.is_(True),
+                Property.condominium_id == cid,
+            )
+        )
+        result = await self._db.execute(sub)
+        ids = [row[0] for row in result.all()]
+        if not ids:
+            return 0
+        rows = await self._db.execute(
+            select(UserProperty).where(UserProperty.id.in_(ids))
+        )
+        today = date.today()
+        for up in rows.scalars().all():
+            up.is_active = False
+            up.end_date = today
+        return len(ids)
 
     async def update(self, user: User, data: dict) -> User:
         for key, val in data.items():

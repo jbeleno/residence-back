@@ -86,6 +86,33 @@ async def restore_user(
     return success(UserOut.model_validate(user).model_dump())
 
 
+@router.delete(
+    "/{user_id}/condominiums/{condominium_id}",
+    dependencies=[Depends(require_admin)],
+)
+async def unlink_user_from_condominium(
+    user_id: UUID,
+    condominium_id: UUID,
+    role: str = Depends(get_current_role),
+    cid: UUID = Depends(get_current_condominium_id),
+    svc: UserService = Depends(_service),
+):
+    """Desvincular a un usuario de un condominio (sin borrar el usuario).
+
+    - admin: solo puede desvincular usuarios de su condo activo
+    - super_admin: puede desvincular de cualquier condo
+
+    Desactiva el UserCondominiumRole y todas las UserProperty activas del
+    usuario en propiedades de ese condominio.
+    """
+    return success(
+        await svc.unlink_from_condominium(
+            user_id, condominium_id,
+            current_role=role, current_cid=cid,
+        )
+    )
+
+
 @router.patch("/me")
 async def update_my_profile(
     body: UserUpdate,
