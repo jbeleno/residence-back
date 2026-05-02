@@ -34,6 +34,7 @@ class Amenity(TenantModel, TimestampMixin, Base):
     max_hours: Mapped[int] = mapped_column(Integer, default=8, server_default="8")
     available_from: Mapped[Optional[str]] = mapped_column(Time)
     available_until: Mapped[Optional[str]] = mapped_column(Time)
+    image_url: Mapped[Optional[str]] = mapped_column(String(500))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     bookings: Mapped[list["AmenityBooking"]] = relationship(back_populates="amenity", lazy="selectin")

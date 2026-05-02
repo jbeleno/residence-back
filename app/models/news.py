@@ -31,5 +31,6 @@ class NewsBoard(TenantModel, TimestampMixin, Base):
     is_published: Mapped[bool] = mapped_column(Boolean, default=True)
     publish_date: Mapped[Optional[datetime]] = mapped_column(default=datetime.utcnow)
     expires_at: Mapped[Optional[datetime]] = mapped_column()
+    cover_url: Mapped[Optional[str]] = mapped_column(String(500))
 
     author: Mapped["User"] = relationship(lazy="joined")

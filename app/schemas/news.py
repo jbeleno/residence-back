@@ -37,6 +37,7 @@ class NewsOut(BaseModel):
     is_published: bool = True
     publish_date: datetime | None = None
     expires_at: datetime | None = None
+    cover_url: str | None = None
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

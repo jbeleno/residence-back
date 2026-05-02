@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     GEMINI_CHAT_MODEL: str = "gemini-2.5-flash-lite"
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
 
+    # ── Cloudflare R2 (S3-compatible object storage) ─────────────────────
+    R2_ACCOUNT_ID: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = ""
+    R2_PUBLIC_BASE_URL: str = ""  # e.g. https://pub-xxxx.r2.dev
+    R2_MAX_UPLOAD_MB: int = 5
+
     # ── App ───────────────────────────────────────────────────────────────
     APP_NAME: str = "Residence SaaS API"
     APP_VERSION: str = "1.0.0"

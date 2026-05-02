@@ -46,6 +46,7 @@ class AmenityOut(BaseModel):
     max_hours: int = 8
     available_from: time | None = None
     available_until: time | None = None
+    image_url: str | None = None
     is_active: bool = True
     created_at: datetime | None = None
 
