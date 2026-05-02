@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
+from app.core.audit import log_event
 from app.core.config import settings
 from app.core.email import generate_pin, send_pin_email
 
@@ -104,11 +105,27 @@ class AuthService:
         """Validate credentials and issue JWT directly."""
         user = await self._repo.get_user_by_email(body.email)
         if user is None or not verify_password(body.password, user.password_hash):
+            await log_event(
+                self._repo._db, "LOGIN_FAILED",
+                metadata={"email": body.email, "reason": "bad_credentials"},
+            )
+            await self._repo.save()
             raise UnauthorizedError("Credenciales inválidas")
         if not user.is_active:
+            await log_event(
+                self._repo._db, "LOGIN_FAILED",
+                user_id=user.id, user_email=user.email,
+                metadata={"reason": "inactive_user"},
+            )
+            await self._repo.save()
             raise ForbiddenError("Usuario inactivo")
 
         user.last_login_at = datetime.utcnow()
+        await log_event(
+            self._repo._db, "LOGIN_SUCCESS",
+            user_id=user.id, user_email=user.email,
+            metadata={"flow": "password"},
+        )
         await self._repo.save()
 
         ucr_rows = await self._repo.get_user_condominium_roles(user.id)
@@ -267,8 +284,18 @@ class AuthService:
         if user is None:
             raise UnauthorizedError("Usuario no encontrado")
         if not verify_password(body.current_password, user.password_hash):
+            await log_event(
+                self._repo._db, "PASSWORD_CHANGE_FAILED",
+                user_id=user.id, user_email=user.email,
+                metadata={"reason": "bad_current_password"},
+            )
+            await self._repo.save()
             raise BadRequestError("Contraseña actual incorrecta")
         user.password_hash = hash_password(body.new_password)
+        await log_event(
+            self._repo._db, "PASSWORD_CHANGED",
+            user_id=user.id, user_email=user.email,
+        )
         await self._repo.save()
 
     async def get_me(self, user, token: str) -> LoginDataOut:
@@ -342,8 +369,14 @@ class AuthService:
         if not pin.payload:
             raise BadRequestError("Solicitud de cambio inválida")
 
+        old_email = user.email
         user.email = pin.payload
         user.email_verified = True
         await self._repo.mark_pin_used(pin)
+        await log_event(
+            self._repo._db, "EMAIL_CHANGED",
+            user_id=user.id, user_email=user.email,
+            metadata={"from": old_email, "to": pin.payload},
+        )
         await self._repo.save()
         return {"message": "Correo actualizado exitosamente."}

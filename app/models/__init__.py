@@ -34,6 +34,7 @@ from app.models.pqr import Pqr, PqrComment
 from app.models.notification import Notification
 from app.models.email_pin import EmailPin
 from app.models.rag import ChatMessage, ChatSession, Document, DocumentChunk
+from app.models.audit_log import AuditLog
 
 __all__ = [
     # catalogs
@@ -50,4 +51,5 @@ __all__ = [
     "Pet", "NewsBoard", "Pqr", "PqrComment", "Notification",
     "EmailPin",
     "Document", "DocumentChunk", "ChatSession", "ChatMessage",
+    "AuditLog",
 ]

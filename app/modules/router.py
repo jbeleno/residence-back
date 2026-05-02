@@ -18,6 +18,7 @@ from app.modules.notifications.router import router as notifications_router
 from app.modules.chatbot.router import router as chatbot_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.uploads.router import router as uploads_router
+from app.modules.audit_logs.router import router as audit_logs_router
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -37,3 +38,4 @@ api_router.include_router(notifications_router)
 api_router.include_router(chatbot_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(uploads_router)
+api_router.include_router(audit_logs_router)
