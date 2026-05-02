@@ -38,6 +38,19 @@ class UserRepository:
         )
         return result.scalars().first()
 
+    async def get_by_id_including_deleted(self, user_id: UUID) -> User | None:
+        result = await self._db.execute(
+            select(User).where(User.id == user_id)
+        )
+        return result.scalars().first()
+
+    async def restore(self, user: User) -> User:
+        user.deleted_at = None
+        user.is_active = True
+        await self._db.commit()
+        await self._db.refresh(user)
+        return user
+
     async def get_by_email(self, email: str) -> User | None:
         result = await self._db.execute(
             select(User).where(User.email == email)

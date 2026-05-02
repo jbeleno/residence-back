@@ -92,3 +92,17 @@ async def soft_delete_condominium(
 ):
     await svc.soft_delete(cid)
     return success({"message": "Condominio eliminado"})
+
+
+@router.post("/{condominium_id}/restore", dependencies=[Depends(require_super_admin)])
+async def restore_condominium(
+    condominium_id: UUID,
+    svc: CondominiumService = Depends(_service),
+):
+    """Restaurar un condominio soft-deleted (solo super_admin).
+
+    No requiere que el condo esté activo en la sesión — lo busca por ID
+    incluyendo los borrados.
+    """
+    condo = await svc.restore(condominium_id)
+    return success(CondominiumOut.model_validate(condo).model_dump())

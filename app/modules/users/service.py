@@ -65,6 +65,14 @@ class UserService:
             raise NotFoundError("Usuario no encontrado")
         return await self._repo.update(user, body.model_dump(exclude_unset=True))
 
+    async def restore_user(self, user_id: UUID):
+        user = await self._repo.get_by_id_including_deleted(user_id)
+        if user is None:
+            raise NotFoundError("Usuario no encontrado")
+        if user.deleted_at is None:
+            raise BadRequestError("El usuario ya está activo")
+        return await self._repo.restore(user)
+
     # ── Devices ───────────────────────────────────────────────────────────
 
     async def register_device(self, user_id: UUID, body: UserDeviceCreate):

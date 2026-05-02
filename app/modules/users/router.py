@@ -14,6 +14,7 @@ from app.core.dependencies import (
     get_current_user,
     require_admin,
     require_authenticated,
+    require_super_admin,
 )
 from app.core.exceptions import ForbiddenError
 from app.core.responses import success
@@ -72,6 +73,16 @@ async def create_user(
             message=message,
         ).model_dump()
     )
+
+
+@router.post("/{user_id}/restore", dependencies=[Depends(require_super_admin)])
+async def restore_user(
+    user_id: UUID,
+    svc: UserService = Depends(_service),
+):
+    """Restaurar un usuario soft-deleted (solo super_admin)."""
+    user = await svc.restore_user(user_id)
+    return success(UserOut.model_validate(user).model_dump())
 
 
 @router.patch("/me")

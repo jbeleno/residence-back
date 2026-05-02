@@ -43,3 +43,12 @@ class CondominiumService:
         if not condo:
             raise NotFoundError("Condominio no encontrado")
         await self._repo.soft_delete(condo)
+
+    async def restore(self, cid: UUID):
+        condo = await self._repo.get_by_id_including_deleted(cid)
+        if not condo:
+            raise NotFoundError("Condominio no encontrado")
+        if condo.deleted_at is None:
+            from app.core.exceptions import BadRequestError
+            raise BadRequestError("El condominio ya está activo")
+        return await self._repo.restore(condo)

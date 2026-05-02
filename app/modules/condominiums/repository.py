@@ -74,6 +74,18 @@ class CondominiumRepository:
         )
         return result.scalars().first()
 
+    async def get_by_id_including_deleted(self, cid: UUID) -> Condominium | None:
+        result = await self._db.execute(
+            select(Condominium).where(Condominium.id == cid)
+        )
+        return result.scalars().first()
+
+    async def restore(self, condo: Condominium) -> Condominium:
+        condo.deleted_at = None
+        await self._db.commit()
+        await self._db.refresh(condo)
+        return condo
+
     async def create(self, data: dict) -> Condominium:
         condo = Condominium(**data)
         self._db.add(condo)

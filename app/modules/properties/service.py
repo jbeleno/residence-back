@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from uuid import UUID
 
-from app.core.exceptions import ForbiddenError, NotFoundError
+from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
 from app.modules.properties.repository import PropertyRepository
 from app.schemas.property import (
     PropertyCreate,
@@ -43,6 +43,16 @@ class PropertyService:
         if not p:
             raise NotFoundError("Propiedad no encontrada")
         p = await self._repo.update(p, body.model_dump(exclude_unset=True))
+        return self._prop_out(p)
+
+    async def restore_property(self, property_id: UUID):
+        """Restore a soft-deleted property. Looks up regardless of condominium."""
+        p = await self._repo.get_property_including_deleted(property_id)
+        if not p:
+            raise NotFoundError("Propiedad no encontrada")
+        if p.deleted_at is None:
+            raise BadRequestError("La propiedad ya está activa")
+        p = await self._repo.restore(p)
         return self._prop_out(p)
 
     # ── Residents ─────────────────────────────────────────────────────────

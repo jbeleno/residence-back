@@ -114,3 +114,18 @@ class PropertyRepository:
             .where(Property.id == property_id, Property.deleted_at.is_(None))
         )
         return result.scalars().first()
+
+    async def get_property_including_deleted(self, property_id: UUID) -> Property | None:
+        result = await self._db.execute(
+            select(Property)
+            .options(selectinload(Property.property_type))
+            .where(Property.id == property_id)
+        )
+        return result.scalars().first()
+
+    async def restore(self, prop: Property) -> Property:
+        prop.deleted_at = None
+        prop.is_active = True
+        await self._db.commit()
+        await self._db.refresh(prop)
+        return prop

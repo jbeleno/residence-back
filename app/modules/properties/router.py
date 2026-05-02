@@ -13,6 +13,7 @@ from app.core.dependencies import (
     get_current_role,
     require_admin,
     require_authenticated,
+    require_super_admin,
 )
 from app.core.responses import success
 from app.modules.properties.repository import PropertyRepository
@@ -70,6 +71,15 @@ async def update_property(
     svc: PropertyService = Depends(_service),
 ):
     return success(await svc.update_property(property_id, body, cid))
+
+
+@router.post("/{property_id}/restore", dependencies=[Depends(require_super_admin)])
+async def restore_property(
+    property_id: UUID,
+    svc: PropertyService = Depends(_service),
+):
+    """Restaurar una propiedad soft-deleted (solo super_admin)."""
+    return success(await svc.restore_property(property_id))
 
 
 # ── Residents ────────────────────────────────────────────────────────────
