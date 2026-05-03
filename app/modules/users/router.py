@@ -86,29 +86,61 @@ async def restore_user(
     return success(UserOut.model_validate(user).model_dump())
 
 
-@router.delete(
-    "/{user_id}/condominiums/{condominium_id}",
-    dependencies=[Depends(require_admin)],
-)
+@router.delete("/{user_id}/condominiums/{condominium_id}")
 async def unlink_user_from_condominium(
     user_id: UUID,
     condominium_id: UUID,
-    role: str = Depends(get_current_role),
-    cid: UUID = Depends(get_current_condominium_id),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     svc: UserService = Depends(_service),
 ):
     """Desvincular a un usuario de un condominio (sin borrar el usuario).
 
     - admin: solo puede desvincular usuarios de su condo activo
-    - super_admin: puede desvincular de cualquier condo
+    - super_admin: puede desvincular de cualquier condo (sin necesidad de
+      haber seleccionado uno primero)
 
     Desactiva el UserCondominiumRole y todas las UserProperty activas del
     usuario en propiedades de ese condominio.
     """
+    from app.core.security import decode_access_token as _decode
+    from app.core.dependencies import oauth2_scheme as _scheme
+
+    # Determine role + cid from JWT (may be absent for unscoped super_admin tokens)
+    from sqlalchemy import select as _sel
+    from app.models.core import Role as _R, UserCondominiumRole as _UCR
+
+    # Check if caller is super_admin in DB
+    sa_check = await db.execute(
+        _sel(_UCR.id).join(_R, _UCR.role_id == _R.id).where(
+            _UCR.user_id == current_user.id,
+            _UCR.is_active.is_(True),
+            _R.role_name == "super_admin",
+        ).limit(1)
+    )
+    is_super = sa_check.first() is not None
+
+    # Check if caller is admin of the TARGET condo
+    admin_check = await db.execute(
+        _sel(_UCR.id).join(_R, _UCR.role_id == _R.id).where(
+            _UCR.user_id == current_user.id,
+            _UCR.condominium_id == condominium_id,
+            _UCR.is_active.is_(True),
+            _R.role_name.in_(["admin", "super_admin"]),
+        ).limit(1)
+    )
+    is_admin_of_condo = admin_check.first() is not None
+
+    if not is_super and not is_admin_of_condo:
+        raise ForbiddenError(
+            "Solo admin del condominio o super_admin pueden desvincular usuarios"
+        )
+
+    role = "super_admin" if is_super else "admin"
     return success(
         await svc.unlink_from_condominium(
             user_id, condominium_id,
-            current_role=role, current_cid=cid,
+            current_role=role, current_cid=condominium_id if is_admin_of_condo else None,
         )
     )
 
