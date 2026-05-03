@@ -39,10 +39,16 @@ class UserService:
         if existing:
             existing_ucr = await self._repo.get_ucr(existing.id, target_cid)
             if existing_ucr:
-                raise ConflictError(
-                    "Este usuario ya está asignado a este condominio"
-                )
-            # Auto-link: only create the UCR, do not touch personal data or password
+                if existing_ucr.is_active:
+                    raise ConflictError(
+                        "Este usuario ya está asignado a este condominio"
+                    )
+                # Reactivate a previously unlinked UCR
+                existing_ucr.is_active = True
+                existing_ucr.role_id = role_id
+                await self._repo.commit_and_refresh(existing)
+                return existing, True
+            # Auto-link: create a brand-new UCR
             ucr = UserCondominiumRole(
                 user_id=existing.id, condominium_id=target_cid, role_id=role_id,
             )
