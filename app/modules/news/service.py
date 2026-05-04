@@ -55,6 +55,7 @@ class NewsService:
             is_published=n.is_published,
             publish_date=n.publish_date,
             expires_at=n.expires_at,
+            cover_url=n.cover_url,
             created_at=n.created_at,
             updated_at=n.updated_at,
         ).model_dump()
